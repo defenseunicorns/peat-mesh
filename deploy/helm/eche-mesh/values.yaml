@@ -1,0 +1,36 @@
+replicaCount: 3
+
+image:
+  repository: eche-mesh-node
+  tag: latest
+  pullPolicy: IfNotPresent
+
+# Base64-encoded formation secret (required)
+formationSecret: ""
+
+# Discovery mode: "kubernetes" or "mdns"
+discoveryMode: kubernetes
+
+# Broker HTTP/WS port
+brokerPort: 8081
+
+# Iroh QUIC port
+irohBindPort: 11204
+
+# Comma-separated Iroh relay URLs (optional)
+irohRelayUrls: ""
+
+# RUST_LOG filter
+rustLog: "info,eche_mesh=debug"
+
+serviceAccount:
+  create: true
+  name: ""
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
