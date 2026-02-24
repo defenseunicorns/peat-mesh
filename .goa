@@ -1,0 +1,186 @@
+#!/usr/bin/env bash
+# Goa CI script for eche-mesh
+# Triggered when changes are detected on the Radicle repo
+#
+# Pipeline:
+#   1. Format check
+#   2. Clippy (default features)
+#   3. Tests (default features)
+#   4. Feature builds: automerge-backend, bluetooth, broker
+#
+# Security: Only runs CI for:
+#   - Patches from delegates (automatic)
+#   - Community patches approved by delegate comment "ok-to-test"
+
+set -euo pipefail
+
+# Ensure cargo is in PATH for systemd/service environments
+export PATH="$HOME/.cargo/bin:$PATH"
+
+echo "=== Goa CI triggered at $(date) ==="
+echo "Commit: ${GOA_COMMIT_OID:-unknown}"
+echo "Patch: ${GOA_PATCH_ID:-none}"
+
+# Resource limits to prevent abuse
+ulimit -t 600 2>/dev/null || true      # 10 min CPU time
+ulimit -v 8388608 2>/dev/null || true  # 8GB virtual memory
+
+# Authorization check for patches
+if [ -n "${GOA_PATCH_ID:-}" ]; then
+    echo ""
+    echo "--- Authorization Check ---"
+
+    # Get patch author DID
+    PATCH_JSON=$(rad patch show "$GOA_PATCH_ID" 2>/dev/null || echo "{}")
+    AUTHOR_DID=$(echo "$PATCH_JSON" | grep -oP 'did:key:[a-zA-Z0-9]+' | head -1 || echo "")
+
+    # Get repository delegates
+    DELEGATES=$(rad inspect --delegates 2>/dev/null || echo "")
+
+    if [ -z "$AUTHOR_DID" ]; then
+        echo "WARNING: Could not determine patch author, proceeding anyway"
+    elif echo "$DELEGATES" | grep -q "$AUTHOR_DID"; then
+        echo "Author is delegate - authorized"
+    else
+        echo "Author is community member - checking for delegate approval..."
+
+        # Look for "ok-to-test" comment from a delegate
+        PATCH_COMMENTS=$(rad patch show "$GOA_PATCH_ID" 2>/dev/null || echo "")
+        APPROVED=0
+
+        for DELEGATE in $DELEGATES; do
+            DELEGATE_DID=$(echo "$DELEGATE" | grep -oP 'did:key:[a-zA-Z0-9]+' || echo "$DELEGATE")
+            if echo "$PATCH_COMMENTS" | grep -B5 "ok-to-test" | grep -q "$DELEGATE_DID"; then
+                echo "Found approval from delegate: $DELEGATE_DID"
+                APPROVED=1
+                break
+            fi
+        done
+
+        if [ $APPROVED -eq 0 ]; then
+            echo ""
+            echo "=== CI skipped: Awaiting delegate approval ==="
+            echo "A delegate must comment 'ok-to-test' to run CI on community patches."
+            exit 0
+        fi
+    fi
+fi
+
+# Pull latest changes and checkout the commit under test
+git fetch rad
+
+ORIGINAL_REF=$(git symbolic-ref --short HEAD 2>/dev/null || git rev-parse HEAD)
+COMMIT="${GOA_COMMIT_OID:-}"
+
+if [ -n "$COMMIT" ]; then
+    echo "Checking out commit: $COMMIT"
+    git checkout --quiet "$COMMIT" || {
+        echo "ERROR: Failed to checkout $COMMIT"
+        exit 1
+    }
+fi
+
+# Ensure we restore the original branch/commit on exit
+cleanup() {
+    if [ -n "${ORIGINAL_REF:-}" ]; then
+        echo "Restoring working tree to $ORIGINAL_REF"
+        git checkout --quiet "$ORIGINAL_REF" 2>/dev/null || true
+    fi
+}
+trap cleanup EXIT
+
+# Track CI results
+FMT_STATUS="skip"
+CLIPPY_STATUS="skip"
+TESTS_STATUS="skip"
+FEAT_AUTOMERGE_STATUS="skip"
+FEAT_BLUETOOTH_STATUS="skip"
+FEAT_BROKER_STATUS="skip"
+HAS_FAILURE=0
+
+# Log file for verbose build output (keeps GOA pipe buffer from filling)
+CI_LOG="/tmp/eche-mesh-ci-$(date +%s).log"
+
+# Run CI checks with timeouts
+CI_TIMEOUT=300  # 5 minutes per step
+
+echo "--- Format Check ---"
+if timeout $CI_TIMEOUT cargo fmt --check >> "$CI_LOG" 2>&1; then
+    FMT_STATUS="pass"
+else
+    FMT_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  fmt: $FMT_STATUS"
+
+echo "--- Clippy ---"
+if timeout $CI_TIMEOUT cargo clippy -- -D warnings >> "$CI_LOG" 2>&1; then
+    CLIPPY_STATUS="pass"
+else
+    CLIPPY_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  clippy: $CLIPPY_STATUS"
+
+echo "--- Tests ---"
+if timeout $CI_TIMEOUT cargo test >> "$CI_LOG" 2>&1; then
+    TESTS_STATUS="pass"
+else
+    TESTS_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  tests: $TESTS_STATUS"
+
+echo "--- Feature: automerge-backend ---"
+if timeout $CI_TIMEOUT cargo build --features automerge-backend >> "$CI_LOG" 2>&1; then
+    FEAT_AUTOMERGE_STATUS="pass"
+else
+    FEAT_AUTOMERGE_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  automerge: $FEAT_AUTOMERGE_STATUS"
+
+echo "--- Feature: bluetooth ---"
+if timeout $CI_TIMEOUT cargo build --features bluetooth >> "$CI_LOG" 2>&1; then
+    FEAT_BLUETOOTH_STATUS="pass"
+else
+    FEAT_BLUETOOTH_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  bluetooth: $FEAT_BLUETOOTH_STATUS"
+
+echo "--- Feature: broker ---"
+if timeout $CI_TIMEOUT cargo build --features broker >> "$CI_LOG" 2>&1; then
+    FEAT_BROKER_STATUS="pass"
+else
+    FEAT_BROKER_STATUS="FAIL"
+    HAS_FAILURE=1
+fi
+echo "  broker: $FEAT_BROKER_STATUS"
+
+echo "Full build log: $CI_LOG"
+
+echo ""
+
+# Build status message
+STATUS_MSG="fmt: ${FMT_STATUS}, clippy: ${CLIPPY_STATUS}, tests: ${TESTS_STATUS}, automerge: ${FEAT_AUTOMERGE_STATUS}, bluetooth: ${FEAT_BLUETOOTH_STATUS}, broker: ${FEAT_BROKER_STATUS}"
+
+# Report results to patch if this is a patch trigger
+if [ -n "${GOA_PATCH_ID:-}" ]; then
+    if [ $HAS_FAILURE -eq 0 ]; then
+        echo "=== CI passed, accepting patch ==="
+        rad patch review "$GOA_PATCH_ID" --accept -m "CI passed - ${STATUS_MSG}"
+    else
+        echo "=== CI failed, rejecting patch ==="
+        rad patch review "$GOA_PATCH_ID" --reject -m "CI failed - ${STATUS_MSG}"
+    fi
+fi
+
+# Final status
+if [ $HAS_FAILURE -eq 0 ]; then
+    echo "=== CI completed successfully ==="
+    exit 0
+else
+    echo "=== CI failed: ${STATUS_MSG} ==="
+    exit 1
+fi

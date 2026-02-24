@@ -1,0 +1,119 @@
+[package]
+name = "eche-mesh"
+version = "0.3.0"
+edition = "2021"
+authors = ["Kit Plummer <kitplummer@defenseunicorns.com>"]
+license = "Apache-2.0"
+description = "Eche mesh networking library with CRDT sync, transport security, and topology management"
+repository = "https://github.com/defenseunicorns/eche-mesh"
+documentation = "https://docs.rs/eche-mesh"
+homepage = "https://github.com/defenseunicorns/eche-mesh"
+keywords = ["mesh", "networking", "crdt", "p2p", "topology"]
+categories = ["network-programming", "cryptography"]
+
+[dependencies]
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# Utilities
+thiserror = "1"
+anyhow = "1"
+async-trait = "0.1"
+tracing = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+
+# Mesh-specific dependencies
+futures = "0.3"
+geohash = "0.13"
+uuid = { version = "1.0", features = ["v4", "serde"] }
+
+# Transport security (bypass.rs — ADR-042)
+ed25519-dalek = { version = "2", features = ["rand_core"] }
+chacha20poly1305 = "0.10"
+
+# Security primitives (ADR-049 Phase 5)
+x25519-dalek = { version = "2", features = ["static_secrets"] }
+hkdf = "0.12"
+hmac = "0.12"
+sha2 = "0.10"
+subtle = "2.6"
+base64 = "0.22"
+hex = "0.4"
+rand_core = { version = "0.6", features = ["getrandom"] }
+
+# Discovery (ADR-049 Phase 2)
+mdns-sd = "0.11"
+toml = "0.8"
+
+# Eche-Lite transport (ADR-035, optional)
+log = { version = "0.4", optional = true }
+# TODO: uncomment after eche-lite-protocol is published to crates.io
+# eche-lite-protocol = { version = "0.2", optional = true }
+
+# Bluetooth LE transport (ADR-032/ADR-039, optional)
+# TODO: uncomment after eche-btle is published to crates.io
+# eche-btle = { version = "0.2", optional = true }
+
+# HTTP/WS service broker (ADR-049 Phase 6)
+axum = { version = "0.7", features = ["macros", "ws", "multipart"], optional = true }
+tower = { version = "0.4", features = ["util"], optional = true }
+tower-http = { version = "0.5", features = ["cors", "trace", "timeout"], optional = true }
+
+# Kubernetes discovery (ADR-0001)
+kube = { version = "0.98", optional = true, default-features = false, features = ["runtime", "client", "derive", "rustls-tls"] }
+k8s-openapi = { version = "0.24", optional = true, default-features = false }
+rustls = { version = "0.23", optional = true, default-features = false, features = ["ring", "logging", "std", "tls12"] }
+
+# Structured logging (binary target)
+tracing-subscriber = { version = "0.3", features = ["env-filter"], optional = true }
+
+# Automerge backend storage (ADR-049 Phase 3)
+automerge = { version = "0.7.1", optional = true }
+iroh = { version = "0.95", optional = true, features = ["discovery-local-network"] }
+iroh-blobs = { version = "0.97", optional = true }
+redb = { version = "2.4", optional = true }
+lru = { version = "0.12", optional = true }
+negentropy = { version = "0.5", optional = true }
+rand = { version = "0.9", optional = true }
+tokio-stream = { version = "0.1", optional = true }
+
+[[bin]]
+name = "eche-mesh-node"
+required-features = ["node"]
+
+[[example]]
+name = "basic_mesh"
+
+[[example]]
+name = "document_sync"
+required-features = ["automerge-backend"]
+
+[[example]]
+name = "broker_service"
+required-features = ["automerge-backend", "broker"]
+
+[features]
+default = []
+# TODO: restore dep:eche-lite-protocol after it's published to crates.io
+lite-bridge = ["log"]
+# TODO: restore dep:eche-btle after it's published to crates.io
+bluetooth = []
+automerge-backend = ["automerge", "iroh", "iroh-blobs", "redb", "lru", "negentropy", "rand", "tokio-stream"]
+broker = ["axum", "tower", "tower-http"]
+kubernetes = ["kube", "k8s-openapi", "rustls"]
+node = ["automerge-backend", "broker", "kubernetes", "k8s-openapi/v1_32", "tracing-subscriber", "lite-bridge"]
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full", "test-util", "macros"] }
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+tempfile = "3.13"
+automerge = "0.7.1"
+http-body-util = "0.1"
+tokio-tungstenite = "0.24"
+futures-util = "0.3"
+k8s-openapi = { version = "0.24", features = ["v1_32"] }
+

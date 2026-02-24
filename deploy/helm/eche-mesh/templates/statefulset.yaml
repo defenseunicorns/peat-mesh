@@ -1,0 +1,62 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ include "eche-mesh.fullname" . }}
+  labels:
+    {{- include "eche-mesh.labels" . | nindent 4 }}
+spec:
+  serviceName: {{ include "eche-mesh.fullname" . }}
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "eche-mesh.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "eche-mesh.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "eche-mesh.serviceAccountName" . }}
+      terminationGracePeriodSeconds: 10
+      containers:
+        - name: eche-mesh-node
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: broker
+              containerPort: {{ .Values.brokerPort }}
+              protocol: TCP
+            - name: iroh-quic
+              containerPort: {{ .Values.irohBindPort }}
+              protocol: UDP
+          env:
+            - name: ECHE_FORMATION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "eche-mesh.fullname" . }}
+                  key: formation-secret
+            - name: ECHE_DISCOVERY
+              value: {{ .Values.discoveryMode | quote }}
+            - name: ECHE_BROKER_PORT
+              value: {{ .Values.brokerPort | quote }}
+            - name: ECHE_IROH_BIND_PORT
+              value: {{ .Values.irohBindPort | quote }}
+            {{- if .Values.irohRelayUrls }}
+            - name: ECHE_IROH_RELAY_URLS
+              value: {{ .Values.irohRelayUrls | quote }}
+            {{- end }}
+            - name: RUST_LOG
+              value: {{ .Values.rustLog | quote }}
+          livenessProbe:
+            httpGet:
+              path: /api/v1/health
+              port: broker
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /api/v1/ready
+              port: broker
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
