@@ -1,11 +1,11 @@
-//! Eche-Lite transport for embedded/constrained devices
+//! Peat-Lite transport for embedded/constrained devices
 //!
-//! This transport enables Full Eche nodes to communicate with Eche-Lite nodes
+//! This transport enables Full Eche nodes to communicate with Peat-Lite nodes
 //! (ESP32, M5Stack, etc.) over simple UDP. It implements the ADR-035 wire protocol.
 //!
 //! # Architecture
 //!
-//! - Listens on UDP port for Eche-Lite messages (default 5555)
+//! - Listens on UDP port for Peat-Lite messages (default 5555)
 //! - Maintains virtual connections to Lite nodes based on heartbeats
 //! - Translates primitive CRDTs to/from Automerge documents
 //! - Emits PeerEvents for connection lifecycle
@@ -65,8 +65,8 @@ use super::{
     PEER_EVENT_CHANNEL_CAPACITY,
 };
 
-// Re-export wire protocol types from eche-lite-protocol (single source of truth)
-pub use eche_lite_protocol::{
+// Re-export wire protocol types from peat-lite-protocol (single source of truth)
+pub use peat_lite_protocol::{
     CrdtType, MessageType, DEFAULT_PORT, HEADER_SIZE, MAGIC, MAX_PACKET_SIZE, PROTOCOL_VERSION,
 };
 
@@ -160,11 +160,11 @@ impl QueryRequest {
     }
 }
 
-/// Capability flags (ADR-035) — re-exported from eche-lite-protocol
-pub use eche_lite_protocol::NodeCapabilities as LiteCapabilities;
+/// Capability flags (ADR-035) — re-exported from peat-lite-protocol
+pub use peat_lite_protocol::NodeCapabilities as LiteCapabilities;
 
 /// Backward-compatibility alias: `FULL_CRDT` maps to `DOCUMENT_CRDT` in
-/// eche-lite-protocol (same bit 0x0004).
+/// peat-lite-protocol (same bit 0x0004).
 pub const FULL_CRDT: u16 = LiteCapabilities::DOCUMENT_CRDT;
 
 /// Extension helpers for LiteCapabilities that accept `&[u8]` (eche-mesh convenience).
@@ -186,7 +186,7 @@ impl LiteCapabilitiesExt for LiteCapabilities {
 // Parsed Message
 // =============================================================================
 
-/// Parsed Eche-Lite message
+/// Parsed Peat-Lite message
 #[derive(Debug, Clone)]
 pub struct LiteMessage {
     pub msg_type: MessageType,
@@ -380,7 +380,7 @@ impl LiteMessage {
 // Configuration
 // =============================================================================
 
-/// Configuration for Eche-Lite transport
+/// Configuration for Peat-Lite transport
 #[derive(Debug, Clone)]
 pub struct LiteTransportConfig {
     /// Port to listen on for incoming messages
@@ -490,7 +490,7 @@ pub struct LitePeerState {
 // Lite Connection
 // =============================================================================
 
-/// Virtual connection to an Eche-Lite peer
+/// Virtual connection to an Peat-Lite peer
 pub struct LiteConnection {
     node_id: NodeId,
     state: Arc<std::sync::RwLock<LitePeerState>>,
@@ -520,7 +520,7 @@ impl MeshConnection for LiteConnection {
 // Lite Mesh Transport
 // =============================================================================
 
-/// Transport for communicating with Eche-Lite nodes
+/// Transport for communicating with Peat-Lite nodes
 pub struct LiteMeshTransport {
     config: LiteTransportConfig,
 
@@ -556,7 +556,7 @@ pub struct LiteMeshTransport {
 }
 
 impl LiteMeshTransport {
-    /// Create a new Eche-Lite transport
+    /// Create a new Peat-Lite transport
     pub fn new(config: LiteTransportConfig, local_node_id: u32) -> Self {
         Self {
             config,

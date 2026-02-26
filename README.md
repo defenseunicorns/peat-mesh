@@ -32,7 +32,7 @@ eche-mesh = "0.1.0"
 | `broker` | HTTP/WebSocket service broker (Axum) |
 | `kubernetes` | Kubernetes peer discovery via EndpointSlice API ([guide](docs/kubernetes.md)) |
 | `node` | All-in-one feature for the `eche-mesh-node` binary (includes broker, kubernetes, automerge-backend) |
-| `lite-bridge` | UDP bridge for Eche-Lite embedded devices (OTA, telemetry) |
+| `lite-bridge` | UDP bridge for Peat-Lite embedded devices (OTA, telemetry) |
 
 ```toml
 # Example with features
@@ -122,7 +122,7 @@ Apache-2.0
 
 ## OTA Firmware Updates
 
-eche-mesh nodes can push firmware updates to Eche-Lite ESP32 devices over UDP:
+eche-mesh nodes can push firmware updates to Peat-Lite ESP32 devices over UDP:
 
 ```bash
 # Via HTTP API (when running as eche-mesh-node)

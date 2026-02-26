@@ -49,10 +49,10 @@ rand_core = { version = "0.6", features = ["getrandom"] }
 mdns-sd = "0.11"
 toml = "0.8"
 
-# Eche-Lite transport (ADR-035, optional)
+# Peat-Lite transport (ADR-035, optional)
 log = { version = "0.4", optional = true }
-# TODO: uncomment after eche-lite v0.2.0 is published to crates.io
-# eche-lite = { version = "0.2", default-features = false, optional = true }
+# TODO: uncomment after peat-lite v0.2.0 is published to crates.io
+# peat-lite = { version = "0.2", default-features = false, optional = true }
 
 # Bluetooth LE transport (ADR-032/ADR-039, optional)
 # TODO: uncomment after eche-btle is published to crates.io
@@ -98,7 +98,7 @@ required-features = ["automerge-backend", "broker"]
 
 [features]
 default = []
-# TODO: restore dep:eche-lite after it's published to crates.io
+# TODO: restore dep:peat-lite after it's published to crates.io
 lite-bridge = ["log"]
 # TODO: restore dep:eche-btle after it's published to crates.io
 bluetooth = []
