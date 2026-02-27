@@ -1,6 +1,6 @@
 //! OTA firmware sender for Peat-Lite nodes.
 //!
-//! Manages firmware delivery from a Full Eche node to one or more Lite peers
+//! Manages firmware delivery from a Full Peat node to one or more Lite peers
 //! using the OTA wire protocol (message types 0x10-0x16) over the existing
 //! `LiteMeshTransport` UDP transport.
 //!

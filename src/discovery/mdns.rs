@@ -20,7 +20,7 @@ pub struct MdnsDiscovery {
 impl MdnsDiscovery {
     /// Create a new mDNS discovery instance
     pub fn new() -> Result<Self> {
-        Self::with_service_type("_eche._udp.local.")
+        Self::with_service_type("_peat._udp.local.")
     }
 
     /// Create a new mDNS discovery instance with a custom service type
@@ -46,7 +46,7 @@ impl MdnsDiscovery {
         port: u16,
         metadata: Option<HashMap<String, String>>,
     ) -> Result<()> {
-        let instance_name = format!("eche-{}", node_id);
+        let instance_name = format!("peat-{}", node_id);
 
         let mut properties = HashMap::new();
         properties.insert("node_id".to_string(), node_id.to_string());
@@ -78,7 +78,7 @@ impl MdnsDiscovery {
 
     /// Unadvertise this node from the local network
     pub fn unadvertise(&self, node_id: &str) -> Result<()> {
-        let instance_name = format!("eche-{}", node_id);
+        let instance_name = format!("peat-{}", node_id);
         let fullname = format!("{}.{}", instance_name, self.service_type);
 
         self.daemon
@@ -186,18 +186,18 @@ impl MdnsDiscovery {
 
     /// Extract node_id from a service fullname
     fn extract_node_id(fullname: &str) -> Option<String> {
-        // Format: "eche-{node_id}._eche._udp.local."
+        // Format: "peat-{node_id}._peat._udp.local."
         let parts: Vec<&str> = fullname.split('.').collect();
         if parts.is_empty() {
             return None;
         }
 
         let instance = parts[0];
-        if !instance.starts_with("eche-") {
+        if !instance.starts_with("peat-") {
             return None;
         }
 
-        Some(instance.strip_prefix("eche-")?.to_string())
+        Some(instance.strip_prefix("peat-")?.to_string())
     }
 }
 
@@ -294,11 +294,11 @@ mod tests {
 
     #[test]
     fn test_extract_node_id() {
-        let fullname = "eche-platform-1._eche._udp.local.";
+        let fullname = "peat-platform-1._peat._udp.local.";
         let node_id = MdnsDiscovery::extract_node_id(fullname);
         assert_eq!(node_id, Some("platform-1".to_string()));
 
-        let invalid = "invalid._eche._udp.local.";
+        let invalid = "invalid._peat._udp.local.";
         let node_id = MdnsDiscovery::extract_node_id(invalid);
         assert_eq!(node_id, None);
     }
@@ -310,14 +310,14 @@ mod tests {
 
     #[test]
     fn test_extract_node_id_just_prefix() {
-        // "eche-" prefix with empty node id
-        let result = MdnsDiscovery::extract_node_id("eche-._eche._udp.local.");
+        // "peat-" prefix with empty node id
+        let result = MdnsDiscovery::extract_node_id("peat-._peat._udp.local.");
         assert_eq!(result, Some("".to_string()));
     }
 
     #[test]
     fn test_extract_node_id_complex() {
-        let fullname = "eche-squad-bravo-3._eche._udp.local.";
+        let fullname = "peat-squad-bravo-3._peat._udp.local.";
         let node_id = MdnsDiscovery::extract_node_id(fullname);
         assert_eq!(node_id, Some("squad-bravo-3".to_string()));
     }
@@ -395,8 +395,8 @@ mod tests {
         props.insert("role".to_string(), "leader".to_string());
 
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-test-node",
+            "_peat._udp.local.",
+            "peat-test-node",
             "localhost",
             "192.168.1.10",
             5000,
@@ -418,8 +418,8 @@ mod tests {
     fn test_parse_service_info_no_node_id() {
         // No "node_id" property → should return None
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-anon",
+            "_peat._udp.local.",
+            "peat-anon",
             "localhost",
             "10.0.0.1",
             4000,
@@ -438,8 +438,8 @@ mod tests {
 
         // Empty string for IP → no addresses
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-ghost",
+            "_peat._udp.local.",
+            "peat-ghost",
             "localhost",
             "",
             3000,
@@ -460,8 +460,8 @@ mod tests {
         props.insert("priority".to_string(), "high".to_string());
 
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-multi",
+            "_peat._udp.local.",
+            "peat-multi",
             "localhost",
             "10.0.0.5",
             6000,
@@ -512,7 +512,7 @@ mod tests {
     #[test]
     fn test_mdns_default() {
         let discovery = MdnsDiscovery::default();
-        assert_eq!(discovery.service_type, "_eche._udp.local.");
+        assert_eq!(discovery.service_type, "_peat._udp.local.");
     }
 
     #[test]
@@ -523,7 +523,7 @@ mod tests {
             None
         );
         assert_eq!(
-            MdnsDiscovery::extract_node_id("ECHE-upper._udp.local."),
+            MdnsDiscovery::extract_node_id("PEAT-upper._udp.local."),
             None
         );
     }
@@ -546,8 +546,8 @@ mod tests {
         let mut props = HashMap::new();
         props.insert("node_id".to_string(), "peer-A".to_string());
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-peer-A",
+            "_peat._udp.local.",
+            "peat-peer-A",
             "host.local.",
             "10.0.0.1",
             5000,
@@ -576,8 +576,8 @@ mod tests {
         let mut props = HashMap::new();
         props.insert("node_id".to_string(), "peer-B".to_string());
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
-            "eche-peer-B",
+            "_peat._udp.local.",
+            "peat-peer-B",
             "host.local.",
             "10.0.0.2",
             5001,
@@ -603,7 +603,7 @@ mod tests {
         let (events_tx, mut events_rx) = mpsc::channel(10);
 
         let info = ServiceInfo::new(
-            "_eche._udp.local.",
+            "_peat._udp.local.",
             "anon",
             "host.local.",
             "10.0.0.3",
@@ -634,7 +634,7 @@ mod tests {
         };
         discovered.write().await.insert("peer-C".to_string(), peer);
 
-        MdnsDiscovery::handle_removed(&discovered, &events_tx, "eche-peer-C._eche._udp.local.")
+        MdnsDiscovery::handle_removed(&discovered, &events_tx, "peat-peer-C._peat._udp.local.")
             .await;
 
         // Peer should be removed from map
@@ -651,14 +651,14 @@ mod tests {
         let discovered = Arc::new(RwLock::new(HashMap::new()));
         let (events_tx, mut events_rx) = mpsc::channel(10);
 
-        MdnsDiscovery::handle_removed(&discovered, &events_tx, "eche-unknown._eche._udp.local.")
+        MdnsDiscovery::handle_removed(&discovered, &events_tx, "peat-unknown._peat._udp.local.")
             .await;
 
         // No event should be sent
         assert!(events_rx.try_recv().is_err());
     }
 
-    /// Test handle_removed with invalid fullname (no eche- prefix).
+    /// Test handle_removed with invalid fullname (no peat- prefix).
     #[tokio::test]
     async fn test_handle_removed_invalid_fullname() {
         let discovered = Arc::new(RwLock::new(HashMap::new()));

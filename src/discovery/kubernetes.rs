@@ -1,6 +1,6 @@
 //! Kubernetes-based peer discovery via EndpointSlice watching.
 //!
-//! Discovers eche-mesh peers running in a Kubernetes cluster by watching
+//! Discovers peat-mesh peers running in a Kubernetes cluster by watching
 //! `EndpointSlice` resources. Peer identity information (node_id, relay URLs)
 //! is extracted from pod annotations with a configurable prefix.
 //!
@@ -25,7 +25,7 @@ pub struct KubernetesDiscoveryConfig {
     pub namespace: Option<String>,
     /// Label selector for EndpointSlice resources.
     pub label_selector: String,
-    /// Annotation prefix for extracting peer metadata (e.g. `"eche."`).
+    /// Annotation prefix for extracting peer metadata (e.g. `"peat."`).
     pub annotation_prefix: String,
     /// Interval between re-list operations.
     pub poll_interval: Duration,
@@ -35,8 +35,8 @@ impl Default for KubernetesDiscoveryConfig {
     fn default() -> Self {
         Self {
             namespace: None,
-            label_selector: "app=eche-mesh".to_string(),
-            annotation_prefix: "eche.".to_string(),
+            label_selector: "app=peat-mesh".to_string(),
+            annotation_prefix: "peat.".to_string(),
             poll_interval: Duration::from_secs(30),
         }
     }
@@ -347,8 +347,8 @@ mod tests {
     fn test_config_defaults() {
         let cfg = KubernetesDiscoveryConfig::default();
         assert!(cfg.namespace.is_none());
-        assert_eq!(cfg.label_selector, "app=eche-mesh");
-        assert_eq!(cfg.annotation_prefix, "eche.");
+        assert_eq!(cfg.label_selector, "app=peat-mesh");
+        assert_eq!(cfg.annotation_prefix, "peat.");
         assert_eq!(cfg.poll_interval, Duration::from_secs(30));
     }
 
@@ -409,10 +409,10 @@ mod tests {
         }];
 
         let mut annotations = std::collections::BTreeMap::new();
-        annotations.insert("eche.formation".to_string(), "alpha".to_string());
+        annotations.insert("peat.formation".to_string(), "alpha".to_string());
 
         let es = make_endpoint_slice(endpoints, ports, Some(annotations));
-        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "eche.");
+        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "peat.");
 
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].node_id, "pod-alpha");
@@ -450,7 +450,7 @@ mod tests {
         }];
 
         let es = make_endpoint_slice(endpoints, ports, None);
-        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "eche.");
+        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "peat.");
 
         assert_eq!(peers.len(), 2);
         assert_eq!(peers[0].node_id, "pod-a");
@@ -465,7 +465,7 @@ mod tests {
             endpoints: vec![],
             ports: None,
         };
-        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "eche.");
+        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "peat.");
         assert!(peers.is_empty());
     }
 
@@ -487,12 +487,12 @@ mod tests {
 
         let mut annotations = std::collections::BTreeMap::new();
         annotations.insert(
-            "eche.relay_url".to_string(),
+            "peat.relay_url".to_string(),
             "https://relay.example.com".to_string(),
         );
 
         let es = make_endpoint_slice(endpoints, ports, Some(annotations));
-        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "eche.");
+        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "peat.");
 
         assert_eq!(peers.len(), 1);
         assert_eq!(
@@ -515,7 +515,7 @@ mod tests {
         }];
 
         let es = make_endpoint_slice(endpoints, ports, None);
-        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "eche.");
+        let peers = KubernetesDiscovery::extract_peers_from_endpoint_slice(&es, "peat.");
 
         assert_eq!(peers.len(), 1);
         assert_eq!(peers[0].node_id, "10.0.0.99");

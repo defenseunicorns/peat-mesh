@@ -85,8 +85,8 @@ struct DeduplicationEntry {
 /// # Example
 ///
 /// ```ignore
-/// use eche_mesh::routing::{SelectiveRouter, DataPacket, DeduplicationConfig};
-/// use eche_mesh::topology::TopologyState;
+/// use peat_mesh::routing::{SelectiveRouter, DataPacket, DeduplicationConfig};
+/// use peat_mesh::topology::TopologyState;
 ///
 /// // Create router with deduplication enabled
 /// let router = SelectiveRouter::new_with_deduplication(DeduplicationConfig::default());
@@ -587,7 +587,7 @@ impl SelectiveRouter {
     /// # Example
     ///
     /// ```ignore
-    /// use eche_mesh::routing::{SelectiveRouter, Aggregator, DataPacket};
+    /// use peat_mesh::routing::{SelectiveRouter, Aggregator, DataPacket};
     ///
     /// let router = SelectiveRouter::new();
     /// // let aggregator = MyAggregator::new();

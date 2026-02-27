@@ -6,7 +6,7 @@
 //! - `SyncEngine`: Synchronization control
 //! - `DataSyncBackend`: Lifecycle and composition
 //!
-//! These traits enable Eche mesh to work with multiple sync engines
+//! These traits enable Peat mesh to work with multiple sync engines
 //! (Ditto, Automerge, custom implementations) without changing business logic.
 
 use crate::sync::types::*;

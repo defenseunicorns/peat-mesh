@@ -7,7 +7,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::storage::GeohashIndex;
+//! use peat_mesh::storage::GeohashIndex;
 //!
 //! let index = GeohashIndex::new(7);  // precision 7 = ~153m cells
 //!
@@ -55,7 +55,7 @@ impl GeohashIndex {
     /// # Arguments
     ///
     /// * `precision` - Geohash string length (1-12). Higher = smaller cells.
-    ///   Use 7 for ~153m tactical cells (default for Eche Protocol).
+    ///   Use 7 for ~153m tactical cells (default for Peat Protocol).
     pub fn new(precision: usize) -> Self {
         Self {
             index: Arc::new(RwLock::new(HashMap::new())),

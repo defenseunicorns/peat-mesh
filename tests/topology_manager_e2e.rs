@@ -3,8 +3,8 @@
 //! These tests validate parent failure recovery including telemetry buffering,
 //! automatic failover to backup parents, and buffer flushing on reconnection.
 
-use eche_mesh::routing::DataPacket;
-use eche_mesh::topology::TopologyConfig;
+use peat_mesh::routing::DataPacket;
+use peat_mesh::topology::TopologyConfig;
 use std::time::Duration;
 
 #[tokio::test]

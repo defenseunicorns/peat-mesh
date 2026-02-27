@@ -46,4 +46,4 @@ pub use sync::InMemoryBackend;
 
 // Phase 7 facade re-exports
 pub use config::{IrohConfig, MeshConfig, MeshDiscoveryConfig, SecurityConfig};
-pub use mesh::{EcheMesh, EcheMeshBuilder, EcheMeshEvent, MeshError, MeshState, MeshStatus};
+pub use mesh::{MeshError, MeshState, MeshStatus, PeatMesh, PeatMeshBuilder, PeatMeshEvent};

@@ -1,6 +1,6 @@
 //! Peat-Lite transport for embedded/constrained devices
 //!
-//! This transport enables Full Eche nodes to communicate with Peat-Lite nodes
+//! This transport enables Full Peat nodes to communicate with Peat-Lite nodes
 //! (ESP32, M5Stack, etc.) over simple UDP. It implements the ADR-035 wire protocol.
 //!
 //! # Architecture
@@ -25,7 +25,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::transport::lite::{LiteMeshTransport, LiteTransportConfig};
+//! use peat_mesh::transport::lite::{LiteMeshTransport, LiteTransportConfig};
 //!
 //! let config = LiteTransportConfig {
 //!     listen_port: 5555,
@@ -167,7 +167,7 @@ pub use peat_lite_protocol::NodeCapabilities as LiteCapabilities;
 /// peat-lite-protocol (same bit 0x0004).
 pub const FULL_CRDT: u16 = LiteCapabilities::DOCUMENT_CRDT;
 
-/// Extension helpers for LiteCapabilities that accept `&[u8]` (eche-mesh convenience).
+/// Extension helpers for LiteCapabilities that accept `&[u8]` (peat-mesh convenience).
 pub trait LiteCapabilitiesExt {
     fn from_bytes(bytes: &[u8]) -> LiteCapabilities;
 }

@@ -1,14 +1,14 @@
 //! Generic packet aggregation for hierarchical telemetry summarization
 //!
 //! This module provides a generic `Aggregator` trait that bridges the gap between:
-//! - **eche-mesh routing**: DataPacket flowing through hierarchy (packets in flight)
+//! - **peat-mesh routing**: DataPacket flowing through hierarchy (packets in flight)
 //! - **Application-specific aggregation**: Computing summaries from raw data
 //!
 //! # Architecture
 //!
 //! The `Aggregator` trait defines a generic interface for aggregating
 //! telemetry packets into summary packets. Concrete implementations
-//! (e.g., Eche's `PacketAggregator`) provide domain-specific aggregation
+//! (e.g., Peat's `PacketAggregator`) provide domain-specific aggregation
 //! logic by implementing this trait.
 
 use super::packet::{DataPacket, DataType};

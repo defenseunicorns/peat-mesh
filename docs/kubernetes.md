@@ -1,6 +1,6 @@
 # Kubernetes Support
 
-eche-mesh can run inside Kubernetes clusters using the `kubernetes` feature flag. This guide covers the code-level APIs added to support K8s deployments. For the deployment guide (binary, Docker, Helm, k3d), see [deployment.md](deployment.md). For architectural context, see [ADR-0001](adr/0001-kubernetes-istio-deployment.md).
+peat-mesh can run inside Kubernetes clusters using the `kubernetes` feature flag. This guide covers the code-level APIs added to support K8s deployments. For the deployment guide (binary, Docker, Helm, k3d), see [deployment.md](deployment.md). For architectural context, see [ADR-0001](adr/0001-kubernetes-istio-deployment.md).
 
 ## Feature flags
 
@@ -8,13 +8,13 @@ eche-mesh can run inside Kubernetes clusters using the `kubernetes` feature flag
 
 ```toml
 [dependencies]
-eche-mesh = { version = "0.1.0", features = ["kubernetes"] }
+peat-mesh = { version = "0.1.0", features = ["kubernetes"] }
 
 # Binary crates must also enable a k8s-openapi version feature:
 k8s-openapi = { version = "0.24", features = ["v1_32"] }
 ```
 
-eche-mesh declares `k8s-openapi` as a dependency **without** a version feature (following the [k8s-openapi library crate convention](https://docs.rs/k8s-openapi/latest/k8s_openapi/#library-crates)). The final binary crate must enable one `v1_*` feature to select the target Kubernetes API version.
+peat-mesh declares `k8s-openapi` as a dependency **without** a version feature (following the [k8s-openapi library crate convention](https://docs.rs/k8s-openapi/latest/k8s_openapi/#library-crates)). The final binary crate must enable one `v1_*` feature to select the target Kubernetes API version.
 
 For non-test builds like `cargo check` or `cargo clippy`, set the environment variable instead:
 
@@ -22,13 +22,13 @@ For non-test builds like `cargo check` or `cargo clippy`, set the environment va
 K8S_OPENAPI_ENABLED_VERSION=1.32 cargo check --features kubernetes
 ```
 
-### Binary target (`eche-mesh-node`)
+### Binary target (`peat-mesh-node`)
 
 The `node` meta-feature bundles everything needed for the Kubernetes binary:
 
 ```toml
 # node = automerge-backend + broker + kubernetes + k8s-openapi/v1_32 + tracing-subscriber
-cargo build --release --bin eche-mesh-node --features node
+cargo build --release --bin peat-mesh-node --features node
 ```
 
 This is the recommended way to build for deployment. The `node` feature solves the k8s-openapi version selection automatically (selects `v1_32`), so you don't need to manage it separately.
@@ -40,26 +40,26 @@ See the [Deployment Guide](deployment.md) for Docker image building, Helm chart 
 Kubernetes pods are ephemeral. To maintain stable node identity without persistent storage, derive a `DeviceKeypair` deterministically from a seed (e.g., a K8s Secret) and a per-pod context string (e.g., pod name or StatefulSet ordinal):
 
 ```rust
-use eche_mesh::security::DeviceKeypair;
+use peat_mesh::security::DeviceKeypair;
 
 // Same seed + context always produces the same keypair
 let keypair = DeviceKeypair::from_seed(
     b"formation-shared-secret-from-k8s-secret",
-    "eche-mesh-0",  // e.g., StatefulSet pod ordinal
+    "peat-mesh-0",  // e.g., StatefulSet pod ordinal
 )?;
 ```
 
 Or via the builder:
 
 ```rust
-use eche_mesh::{EcheMeshBuilder, MeshConfig};
+use peat_mesh::{PeatMeshBuilder, MeshConfig};
 
-let seed = std::env::var("ECHE_FORMATION_SECRET")
-    .expect("ECHE_FORMATION_SECRET must be set")
+let seed = std::env::var("PEAT_FORMATION_SECRET")
+    .expect("PEAT_FORMATION_SECRET must be set")
     .into_bytes();
 let pod_name = std::env::var("HOSTNAME").unwrap_or_else(|_| "default".into());
 
-let mesh = EcheMeshBuilder::new(MeshConfig::default())
+let mesh = PeatMeshBuilder::new(MeshConfig::default())
     .with_device_keypair_from_seed(&seed, &pod_name)?
     .build();
 ```
@@ -73,16 +73,16 @@ This uses HKDF-SHA256 internally. Different contexts produce different keys, so 
 ### Configuration
 
 ```rust
-use eche_mesh::discovery::KubernetesDiscoveryConfig;
+use peat_mesh::discovery::KubernetesDiscoveryConfig;
 use std::time::Duration;
 
 let config = KubernetesDiscoveryConfig {
     // Namespace to watch. None = read from service account mount or "default"
-    namespace: Some("eche".to_string()),
+    namespace: Some("peat".to_string()),
     // Label selector for EndpointSlice resources
-    label_selector: "app=eche-mesh".to_string(),
+    label_selector: "app=peat-mesh".to_string(),
     // Annotation prefix for extracting peer metadata
-    annotation_prefix: "eche.".to_string(),
+    annotation_prefix: "peat.".to_string(),
     // Interval between re-list operations
     poll_interval: Duration::from_secs(30),
 };
@@ -91,7 +91,7 @@ let config = KubernetesDiscoveryConfig {
 ### Usage
 
 ```rust
-use eche_mesh::discovery::{KubernetesDiscovery, KubernetesDiscoveryConfig};
+use peat_mesh::discovery::{KubernetesDiscovery, KubernetesDiscoveryConfig};
 
 let mut discovery = KubernetesDiscovery::new(KubernetesDiscoveryConfig::default());
 
@@ -104,13 +104,13 @@ discovery.start().await?;
 // Process discovery events
 while let Some(event) = events.recv().await {
     match event {
-        eche_mesh::discovery::DiscoveryEvent::PeerFound(peer) => {
+        peat_mesh::discovery::DiscoveryEvent::PeerFound(peer) => {
             println!("Found peer: {} at {:?}", peer.node_id, peer.addresses);
         }
-        eche_mesh::discovery::DiscoveryEvent::PeerLost(id) => {
+        peat_mesh::discovery::DiscoveryEvent::PeerLost(id) => {
             println!("Lost peer: {}", id);
         }
-        eche_mesh::discovery::DiscoveryEvent::PeerUpdated(peer) => {
+        peat_mesh::discovery::DiscoveryEvent::PeerUpdated(peer) => {
             println!("Updated peer: {}", peer.node_id);
         }
     }
@@ -125,8 +125,8 @@ The pod's service account needs permission to list and watch EndpointSlices:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
-  name: eche-mesh-discovery
-  namespace: eche
+  name: peat-mesh-discovery
+  namespace: peat
 rules:
 - apiGroups: ["discovery.k8s.io"]
   resources: ["endpointslices"]
@@ -135,27 +135,27 @@ rules:
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: eche-mesh-discovery
-  namespace: eche
+  name: peat-mesh-discovery
+  namespace: peat
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: eche-mesh-discovery
+  name: peat-mesh-discovery
 subjects:
 - kind: ServiceAccount
-  name: eche-mesh
-  namespace: eche
+  name: peat-mesh
+  namespace: peat
 ```
 
 ### Pod annotations
 
-Peer metadata is extracted from EndpointSlice annotations with the configured prefix. For example, with the default `eche.` prefix:
+Peer metadata is extracted from EndpointSlice annotations with the configured prefix. For example, with the default `peat.` prefix:
 
 ```yaml
 metadata:
   annotations:
-    eche.formation: "alpha-company"
-    eche.relay_url: "https://relay.example.com"
+    peat.formation: "alpha-company"
+    peat.relay_url: "https://relay.example.com"
 ```
 
 The `relay_url` annotation is special-cased: it populates `PeerInfo.relay_url` rather than appearing in the metadata map.
@@ -165,7 +165,7 @@ The `relay_url` annotation is special-cased: it populates `PeerInfo.relay_url` r
 `IrohConfig` provides bind address and relay URL configuration for the Iroh networking layer:
 
 ```rust
-use eche_mesh::IrohConfig;
+use peat_mesh::IrohConfig;
 
 let iroh_config = IrohConfig {
     // Fixed bind address (instead of ephemeral port)
@@ -178,7 +178,7 @@ let iroh_config = IrohConfig {
 Wire it into `MeshConfig`:
 
 ```rust
-use eche_mesh::{MeshConfig, IrohConfig};
+use peat_mesh::{MeshConfig, IrohConfig};
 
 let config = MeshConfig {
     iroh: IrohConfig {
@@ -229,7 +229,7 @@ fn readiness(&self) -> ReadinessResponse {
 
 ## Development
 
-When developing eche-mesh with the `kubernetes` feature locally (outside a cluster), `KubernetesDiscovery::start()` will fail to create a client since there's no kubeconfig or service account. Use `with_client()` to inject a mock or test client:
+When developing peat-mesh with the `kubernetes` feature locally (outside a cluster), `KubernetesDiscovery::start()` will fail to create a client since there's no kubeconfig or service account. Use `with_client()` to inject a mock or test client:
 
 ```rust
 let client = kube::Client::try_default().await?;

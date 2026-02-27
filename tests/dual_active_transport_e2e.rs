@@ -10,13 +10,13 @@ use std::time::Instant;
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
-use eche_mesh::transport::{
+use peat_mesh::transport::{
     CollectionRouteConfig, CollectionRouteTable, CollectionTransportRoute, MeshConnection,
     MeshTransport, MessagePriority, MessageRequirements, NodeId, PeerEventReceiver, RouteDecision,
     Transport, TransportCapabilities, TransportInstance, TransportManager, TransportManagerConfig,
     TransportPolicy, TransportType,
 };
-use eche_mesh::transport::{Result, TransportError};
+use peat_mesh::transport::{Result, TransportError};
 
 // =============================================================================
 // Mock Transport (self-contained, matches manager.rs pattern)

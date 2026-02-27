@@ -23,7 +23,7 @@
 //! # Example
 //!
 //! ```
-//! use eche_mesh::qos::SyncMode;
+//! use peat_mesh::qos::SyncMode;
 //!
 //! // Position data - only current state matters
 //! assert_eq!(SyncMode::default_for_collection("beacons"), SyncMode::LatestOnly);
@@ -153,7 +153,7 @@ impl fmt::Display for SyncMode {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::qos::{SyncMode, SyncModeRegistry};
+/// use peat_mesh::qos::{SyncMode, SyncModeRegistry};
 ///
 /// let registry = SyncModeRegistry::with_defaults();
 ///

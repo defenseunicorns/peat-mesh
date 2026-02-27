@@ -2315,7 +2315,7 @@ impl AutomergeSyncCoordinator {
     /// - UpOnly: propagate only to parent peers (requires hierarchy info)
     /// - DownOnly: propagate only to child peers (requires hierarchy info)
     ///
-    /// Note: UpOnly/DownOnly require hierarchy context from the EcheMesh layer.
+    /// Note: UpOnly/DownOnly require hierarchy context from the PeatMesh layer.
     /// At this transport level, we can't distinguish parent vs child peers,
     /// so we conservatively propagate bidirectionally for now.
     async fn propagate_tombstone_to_peers(
@@ -2357,12 +2357,12 @@ impl AutomergeSyncCoordinator {
                 target_peers
             }
             PropagationDirection::UpOnly | PropagationDirection::DownOnly => {
-                // UpOnly/DownOnly requires hierarchy context from EcheMesh layer
+                // UpOnly/DownOnly requires hierarchy context from PeatMesh layer
                 // At the transport layer, we don't know parent vs child relationships.
                 // Conservative approach: log warning and skip propagation.
-                // The EcheMesh layer should handle directional propagation.
+                // The PeatMesh layer should handle directional propagation.
                 tracing::debug!(
-                    "Tombstone {}:{} has {:?} propagation - skipping at transport layer (handled by EcheMesh)",
+                    "Tombstone {}:{} has {:?} propagation - skipping at transport layer (handled by PeatMesh)",
                     tombstone_msg.tombstone.collection,
                     tombstone_msg.tombstone.document_id,
                     direction

@@ -3,8 +3,8 @@
 //! These tests validate the integration between PartitionDetector,
 //! AutonomousOperationHandler, and TopologyBuilder in realistic scenarios.
 
-use eche_mesh::beacon::{GeoPosition, GeographicBeacon, HierarchyLevel};
-use eche_mesh::topology::{
+use peat_mesh::beacon::{GeoPosition, GeographicBeacon, HierarchyLevel};
+use peat_mesh::topology::{
     AutonomousOperationHandler, AutonomousState, PartitionConfig, PartitionDetector, TopologyConfig,
 };
 use std::collections::HashMap;
@@ -42,7 +42,7 @@ fn test_partition_detector_with_autonomous_handler_integration() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Platform, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Initially no partition - have higher-level beacons
     let beacons_with_parent = create_beacon_map(vec![
@@ -99,7 +99,7 @@ fn test_topology_config_with_partition_detector() {
 
     let detector = Arc::new(Mutex::new(
         PartitionDetector::new(HierarchyLevel::Platform, config)
-            .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>),
+            .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>),
     ));
 
     // Create TopologyConfig with partition detector
@@ -146,7 +146,7 @@ fn test_partition_detection_respects_operational_flag() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Platform, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Have higher-level beacon but it's NOT operational
     let beacons_non_operational = create_beacon_map(vec![create_beacon(
@@ -171,7 +171,7 @@ fn test_partition_healing_resets_detection_state() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Platform, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Detect partition
     let beacons_empty = HashMap::new();
@@ -203,7 +203,7 @@ fn test_multiple_higher_level_beacons_prevent_partition() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Platform, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Multiple higher-level beacons visible
     let beacons_multiple = create_beacon_map(vec![
@@ -228,7 +228,7 @@ fn test_company_level_node_always_partitioned() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Company, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Even with lower-level beacons, Company node should detect partition
     let beacons_lower_levels = create_beacon_map(vec![
@@ -253,7 +253,7 @@ fn test_partition_duration_tracking() {
     };
 
     let mut detector = PartitionDetector::new(HierarchyLevel::Platform, config)
-        .with_handler(handler.clone() as Arc<dyn eche_mesh::topology::PartitionHandler>);
+        .with_handler(handler.clone() as Arc<dyn peat_mesh::topology::PartitionHandler>);
 
     // Enter partition
     let beacons_empty = HashMap::new();
@@ -273,7 +273,7 @@ fn test_partition_duration_tracking() {
 
     // Verify event has partition duration
     assert!(heal_event.is_some());
-    if let Some(eche_mesh::topology::PartitionEvent::PartitionHealed {
+    if let Some(peat_mesh::topology::PartitionEvent::PartitionHealed {
         partition_duration, ..
     }) = heal_event
     {

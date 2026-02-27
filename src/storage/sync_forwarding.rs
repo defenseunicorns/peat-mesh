@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_protocol::storage::sync_forwarding::SyncForwarder;
+//! use peat_protocol::storage::sync_forwarding::SyncForwarder;
 //!
 //! let forwarder = SyncForwarder::new(local_node_id);
 //!

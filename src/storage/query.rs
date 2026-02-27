@@ -6,7 +6,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::storage::{Query, SortOrder, Value};
+//! use peat_mesh::storage::{Query, SortOrder, Value};
 //!
 //! let results = Query::new(store.clone(), "beacons")
 //!     .where_eq("operational", Value::Bool(true))

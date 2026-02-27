@@ -9,8 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Extract sync modules from eche-protocol into eche-mesh (automerge_sync, sync_channel, sync_forwarding)
-- Wire AutomergeSyncCoordinator into eche-mesh-node binary with 5s polling task
+- Extract sync modules from peat-protocol into peat-mesh (automerge_sync, sync_channel, sync_forwarding)
+- Wire AutomergeSyncCoordinator into peat-mesh-node binary with 5s polling task
 - Update deployment guide for Automerge sync stack
 
 ### Fixed
@@ -21,8 +21,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Initial extraction as standalone crate from eche-protocol
-- Complete Eche-Lite CRDT encodings, query handler, and InMemoryBackend
+- Initial extraction as standalone crate from peat-protocol
+- Complete Peat-Lite CRDT encodings, query handler, and InMemoryBackend
 - Kubernetes support: discovery, headless service, StatefulSet (ADR-0001)
 - Kubernetes deployment infrastructure: Dockerfile, Helm chart, health probes (ADR-0001 Phase 2)
 - HTTP/WS service broker with REST API and WebSocket event streaming
@@ -31,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Topology management with partition detection and autonomous operation
 - Beacon broadcasting and observation for geographic mesh awareness
 - GOA CI script for Radicle patches
-- ADR-0001 through ADR-0009 transferred from eche repo
+- ADR-0001 through ADR-0009 transferred from peat repo
 - README with CI and usage details
 
 ### Fixed

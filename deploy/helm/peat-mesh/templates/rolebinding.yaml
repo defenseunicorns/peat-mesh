@@ -2,15 +2,15 @@
 apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
-  name: {{ include "eche-mesh.fullname" . }}
+  name: {{ include "peat-mesh.fullname" . }}
   labels:
-    {{- include "eche-mesh.labels" . | nindent 4 }}
+    {{- include "peat-mesh.labels" . | nindent 4 }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
-  name: {{ include "eche-mesh.fullname" . }}
+  name: {{ include "peat-mesh.fullname" . }}
 subjects:
   - kind: ServiceAccount
-    name: {{ include "eche-mesh.serviceAccountName" . }}
+    name: {{ include "peat-mesh.serviceAccountName" . }}
     namespace: {{ .Release.Namespace }}
 {{- end }}
