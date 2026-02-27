@@ -262,7 +262,7 @@ async fn run() -> anyhow::Result<()> {
         })
     };
 
-    // ── Eche-Lite transport + OTA sender ───────────────────────────
+    // ── Peat-Lite transport + OTA sender ───────────────────────────
     let lite_port: u16 = std::env::var("ECHE_LITE_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
@@ -290,7 +290,7 @@ async fn run() -> anyhow::Result<()> {
             e
         );
     } else {
-        info!(port = lite_port, "Eche-Lite transport started");
+        info!(port = lite_port, "Peat-Lite transport started");
     }
 
     // Derive OTA signing keypair from formation secret
@@ -298,7 +298,7 @@ async fn run() -> anyhow::Result<()> {
         .map_err(|e| anyhow::anyhow!("OTA keypair derivation failed: {}", e))?;
     info!(
         ota_signing_pubkey = %hex::encode(ota_keypair.public_key_bytes()),
-        "OTA signing keypair derived (use this pubkey for eche-lite builds)"
+        "OTA signing keypair derived (use this pubkey for peat-lite builds)"
     );
     let ota_sender = Arc::new(OtaSender::new(
         lite_transport.clone(),
