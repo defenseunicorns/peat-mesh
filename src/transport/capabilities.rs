@@ -20,7 +20,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! use eche_mesh::transport::{TransportManager, MessageRequirements, MessagePriority};
+//! use peat_mesh::transport::{TransportManager, MessageRequirements, MessagePriority};
 //!
 //! // Register transports
 //! let mut manager = TransportManager::new(config);
@@ -97,7 +97,7 @@ impl std::fmt::Display for TransportType {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::transport::{TransportCapabilities, TransportType};
+/// use peat_mesh::transport::{TransportCapabilities, TransportType};
 ///
 /// let quic_caps = TransportCapabilities {
 ///     transport_type: TransportType::Quic,
@@ -308,7 +308,7 @@ impl std::fmt::Display for MessagePriority {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::transport::{MessageRequirements, MessagePriority};
+/// use peat_mesh::transport::{MessageRequirements, MessagePriority};
 ///
 /// // High-priority reliable message
 /// let requirements = MessageRequirements {
@@ -624,7 +624,7 @@ impl std::fmt::Display for PaceLevel {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::transport::TransportPolicy;
+/// use peat_mesh::transport::TransportPolicy;
 ///
 /// let policy = TransportPolicy::new("tactical-standard")
 ///     .primary(vec!["iroh-eth0", "iroh-wlan0"])

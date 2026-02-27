@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Goa CI script for eche-mesh
+# Goa CI script for peat-mesh
 # Triggered when changes are detected on the Radicle repo
 #
 # Pipeline:
@@ -99,7 +99,7 @@ FEAT_BROKER_STATUS="skip"
 HAS_FAILURE=0
 
 # Log file for verbose build output (keeps GOA pipe buffer from filling)
-CI_LOG="/tmp/eche-mesh-ci-$(date +%s).log"
+CI_LOG="/tmp/peat-mesh-ci-$(date +%s).log"
 
 # Run CI checks with timeouts
 CI_TIMEOUT=300  # 5 minutes per step

@@ -39,11 +39,11 @@ pub const SYMMETRIC_KEY_SIZE: usize = 32;
 pub const X25519_PUBLIC_KEY_SIZE: usize = 32;
 
 /// HKDF info string for peer-to-peer key derivation
-const HKDF_INFO_PEER: &[u8] = b"eche-protocol-v1-peer";
+const HKDF_INFO_PEER: &[u8] = b"peat-protocol-v1-peer";
 
 /// HKDF info string for group key derivation (reserved for future key distribution)
 #[allow(dead_code)]
-const HKDF_INFO_GROUP: &[u8] = b"eche-protocol-v1-group";
+const HKDF_INFO_GROUP: &[u8] = b"peat-protocol-v1-group";
 
 /// X25519 keypair for key exchange
 #[derive(Clone)]
@@ -446,7 +446,7 @@ impl EncryptionManager {
         // Derive device key from keypair public key
         let hk = Hkdf::<Sha256>::new(None, keypair.public_key_bytes().as_ref());
         let mut device_key_bytes = [0u8; SYMMETRIC_KEY_SIZE];
-        hk.expand(b"eche-protocol-v1-device", &mut device_key_bytes)
+        hk.expand(b"peat-protocol-v1-device", &mut device_key_bytes)
             .expect("HKDF expand should never fail");
 
         Self {

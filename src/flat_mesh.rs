@@ -3,7 +3,7 @@
 //! Provides a flat mesh coordinator where all nodes are peers at the same level,
 //! using DynamicHierarchyStrategy for leader election and CRDT for state sync.
 //!
-//! This enables Lab 3b: P2P mesh with Eche CRDT overhead measurement.
+//! This enables Lab 3b: P2P mesh with Peat CRDT overhead measurement.
 
 use crate::beacon::{GeographicBeacon, HierarchyLevel, NodeProfile};
 use crate::hierarchy::{DynamicHierarchyStrategy, ElectionConfig, HierarchyStrategy, NodeRole};

@@ -470,8 +470,8 @@ impl std::fmt::Debug for SyncSubscription {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::sync::types::{Subscription, Query, GeoPoint, SubscriptionQoS};
-/// use eche_mesh::qos::SyncMode;
+/// use peat_mesh::sync::types::{Subscription, Query, GeoPoint, SubscriptionQoS};
+/// use peat_mesh::qos::SyncMode;
 ///
 /// // Subscribe to nearby beacons with LatestOnly sync
 /// let subscription = Subscription {
@@ -690,8 +690,8 @@ pub enum Priority {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::sync::types::SyncModeMetrics;
-/// use eche_mesh::qos::SyncMode;
+/// use peat_mesh::sync::types::SyncModeMetrics;
+/// use peat_mesh::qos::SyncMode;
 ///
 /// let mut metrics = SyncModeMetrics::new();
 /// metrics.record_sync("beacons", SyncMode::LatestOnly, 1024, std::time::Duration::from_millis(5));

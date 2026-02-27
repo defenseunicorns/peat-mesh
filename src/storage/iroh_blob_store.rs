@@ -13,7 +13,7 @@
 //! # Usage
 //!
 //! ```ignore
-//! use eche_mesh::storage::{IrohBlobStore, BlobStore, BlobMetadata};
+//! use peat_mesh::storage::{IrohBlobStore, BlobStore, BlobMetadata};
 //! use std::path::Path;
 //!
 //! let blob_store = IrohBlobStore::new_in_memory(blob_dir).await?;
@@ -105,7 +105,7 @@ impl IrohBlobStore {
 
     /// Create with default temp directory
     pub async fn new_temp() -> Result<Self> {
-        let blob_dir = std::env::temp_dir().join("eche_iroh_blobs");
+        let blob_dir = std::env::temp_dir().join("peat_iroh_blobs");
         Self::new_in_memory(blob_dir).await
     }
 
@@ -501,7 +501,7 @@ use tokio::sync::RwLock as TokioRwLock;
 /// # Usage
 ///
 /// ```ignore
-/// use eche_mesh::storage::NetworkedIrohBlobStore;
+/// use peat_mesh::storage::NetworkedIrohBlobStore;
 ///
 /// // Create with networking
 /// let store = NetworkedIrohBlobStore::new(blob_dir).await?;

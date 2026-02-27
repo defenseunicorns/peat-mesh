@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::storage::{BlobStore, BlobMetadata};
+//! use peat_mesh::storage::{BlobStore, BlobMetadata};
 //! use std::path::Path;
 //!
 //! // Create blob from file

@@ -15,7 +15,7 @@
 //! # Example
 //!
 //! ```
-//! use eche_mesh::qos::{DeletionPolicy, DeletionPolicyRegistry};
+//! use peat_mesh::qos::{DeletionPolicy, DeletionPolicyRegistry};
 //! use std::time::Duration;
 //!
 //! let registry = DeletionPolicyRegistry::with_defaults();

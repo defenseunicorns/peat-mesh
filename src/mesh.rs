@@ -1,6 +1,6 @@
-//! EcheMesh facade — unified entry point for the mesh networking library.
+//! PeatMesh facade — unified entry point for the mesh networking library.
 //!
-//! Provides [`EcheMesh`] as the single entry point that composes transport,
+//! Provides [`PeatMesh`] as the single entry point that composes transport,
 //! topology, routing, hierarchy, and (optionally) the HTTP/WS broker into a
 //! cohesive mesh networking stack.
 
@@ -90,7 +90,7 @@ impl From<TransportError> for MeshError {
 
 /// Mesh-wide events broadcast to subscribers.
 #[derive(Debug, Clone)]
-pub enum EcheMeshEvent {
+pub enum PeatMeshEvent {
     /// Mesh lifecycle state changed.
     StateChanged(MeshState),
     /// A new peer joined the mesh.
@@ -116,15 +116,15 @@ pub struct MeshStatus {
     pub uptime: std::time::Duration,
 }
 
-// ─── EcheMesh facade ────────────────────────────────────────────────────────
+// ─── PeatMesh facade ────────────────────────────────────────────────────────
 
 const EVENT_CHANNEL_CAPACITY: usize = 256;
 
 /// Unified mesh facade composing all subsystems.
 ///
-/// Create with [`EcheMesh::new`] for simple use or [`EcheMeshBuilder`] for
+/// Create with [`PeatMesh::new`] for simple use or [`PeatMeshBuilder`] for
 /// advanced construction with pre-configured subsystems.
-pub struct EcheMesh {
+pub struct PeatMesh {
     config: MeshConfig,
     node_id: String,
     state: RwLock<MeshState>,
@@ -146,14 +146,14 @@ pub struct EcheMesh {
     beacon_janitor: Option<crate::beacon::BeaconJanitor>,
     // ── Topology ──
     topology_manager: Option<crate::topology::TopologyManager>,
-    event_tx: broadcast::Sender<EcheMeshEvent>,
+    event_tx: broadcast::Sender<PeatMeshEvent>,
     #[cfg(feature = "broker")]
     broker_event_tx: broadcast::Sender<crate::broker::state::MeshEvent>,
     started_at: RwLock<Option<Instant>>,
 }
 
-impl EcheMesh {
-    /// Create a new EcheMesh with the given configuration.
+impl PeatMesh {
+    /// Create a new PeatMesh with the given configuration.
     ///
     /// If `config.node_id` is `None`, a UUID v4 is generated automatically.
     pub fn new(config: MeshConfig) -> Self {
@@ -201,13 +201,13 @@ impl EcheMesh {
         *state = MeshState::Starting;
         let _ = self
             .event_tx
-            .send(EcheMeshEvent::StateChanged(MeshState::Starting));
+            .send(PeatMeshEvent::StateChanged(MeshState::Starting));
 
         *state = MeshState::Running;
         *self.started_at.write().unwrap() = Some(Instant::now());
         let _ = self
             .event_tx
-            .send(EcheMeshEvent::StateChanged(MeshState::Running));
+            .send(PeatMeshEvent::StateChanged(MeshState::Running));
 
         #[cfg(feature = "broker")]
         self.emit_broker_event(crate::broker::state::MeshEvent::TopologyChanged {
@@ -229,12 +229,12 @@ impl EcheMesh {
         *state = MeshState::Stopping;
         let _ = self
             .event_tx
-            .send(EcheMeshEvent::StateChanged(MeshState::Stopping));
+            .send(PeatMeshEvent::StateChanged(MeshState::Stopping));
 
         *state = MeshState::Stopped;
         let _ = self
             .event_tx
-            .send(EcheMeshEvent::StateChanged(MeshState::Stopped));
+            .send(PeatMeshEvent::StateChanged(MeshState::Stopped));
 
         #[cfg(feature = "broker")]
         self.emit_broker_event(crate::broker::state::MeshEvent::TopologyChanged {
@@ -280,7 +280,7 @@ impl EcheMesh {
     }
 
     /// Subscribe to mesh-wide events.
-    pub fn subscribe_events(&self) -> broadcast::Receiver<EcheMeshEvent> {
+    pub fn subscribe_events(&self) -> broadcast::Receiver<PeatMeshEvent> {
         self.event_tx.subscribe()
     }
 
@@ -439,7 +439,7 @@ impl EcheMesh {
 
 #[cfg(feature = "broker")]
 #[async_trait::async_trait]
-impl crate::broker::state::MeshBrokerState for EcheMesh {
+impl crate::broker::state::MeshBrokerState for PeatMesh {
     fn node_info(&self) -> crate::broker::state::MeshNodeInfo {
         let uptime = self
             .started_at
@@ -511,8 +511,8 @@ impl crate::broker::state::MeshBrokerState for EcheMesh {
 
 // ─── Builder ─────────────────────────────────────────────────────────────────
 
-/// Builder for constructing a [`EcheMesh`] with pre-configured subsystems.
-pub struct EcheMeshBuilder {
+/// Builder for constructing a [`PeatMesh`] with pre-configured subsystems.
+pub struct PeatMeshBuilder {
     config: MeshConfig,
     transport: Option<Arc<dyn MeshTransport>>,
     transport_manager: Option<TransportManager>,
@@ -529,7 +529,7 @@ pub struct EcheMeshBuilder {
     topology_manager: Option<crate::topology::TopologyManager>,
 }
 
-impl EcheMeshBuilder {
+impl PeatMeshBuilder {
     /// Create a new builder with the given configuration.
     pub fn new(config: MeshConfig) -> Self {
         Self {
@@ -645,8 +645,8 @@ impl EcheMeshBuilder {
         self
     }
 
-    /// Build the [`EcheMesh`] instance.
-    pub fn build(self) -> EcheMesh {
+    /// Build the [`PeatMesh`] instance.
+    pub fn build(self) -> PeatMesh {
         let node_id = self
             .config
             .node_id
@@ -656,7 +656,7 @@ impl EcheMeshBuilder {
         #[cfg(feature = "broker")]
         let (broker_event_tx, _) = broadcast::channel(EVENT_CHANNEL_CAPACITY);
 
-        EcheMesh {
+        PeatMesh {
             config: self.config,
             node_id,
             state: RwLock::new(MeshState::Created),
@@ -742,11 +742,11 @@ mod tests {
         }
     }
 
-    // ── EcheMesh::new ────────────────────────────────────────────
+    // ── PeatMesh::new ────────────────────────────────────────────
 
     #[test]
     fn test_new_with_default_config() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert_eq!(mesh.state(), MeshState::Created);
         assert!(!mesh.node_id().is_empty());
     }
@@ -757,13 +757,13 @@ mod tests {
             node_id: Some("my-node".to_string()),
             ..Default::default()
         };
-        let mesh = EcheMesh::new(cfg);
+        let mesh = PeatMesh::new(cfg);
         assert_eq!(mesh.node_id(), "my-node");
     }
 
     #[test]
     fn test_new_auto_generates_uuid_node_id() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         // UUID v4 format: 8-4-4-4-12 hex digits
         assert_eq!(mesh.node_id().len(), 36);
         assert_eq!(mesh.node_id().chars().filter(|&c| c == '-').count(), 4);
@@ -773,14 +773,14 @@ mod tests {
 
     #[test]
     fn test_start_transitions_to_running() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.start().is_ok());
         assert_eq!(mesh.state(), MeshState::Running);
     }
 
     #[test]
     fn test_start_when_already_running_returns_error() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         mesh.start().unwrap();
         let err = mesh.start().unwrap_err();
         assert!(matches!(err, MeshError::AlreadyRunning));
@@ -788,7 +788,7 @@ mod tests {
 
     #[test]
     fn test_stop_transitions_to_stopped() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         mesh.start().unwrap();
         assert!(mesh.stop().is_ok());
         assert_eq!(mesh.state(), MeshState::Stopped);
@@ -796,14 +796,14 @@ mod tests {
 
     #[test]
     fn test_stop_when_not_running_returns_error() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let err = mesh.stop().unwrap_err();
         assert!(matches!(err, MeshError::NotRunning));
     }
 
     #[test]
     fn test_restart_after_stop() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         mesh.start().unwrap();
         mesh.stop().unwrap();
         assert!(mesh.start().is_ok());
@@ -812,13 +812,13 @@ mod tests {
 
     #[test]
     fn test_stop_when_created_returns_error() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(matches!(mesh.stop().unwrap_err(), MeshError::NotRunning));
     }
 
     #[test]
     fn test_stop_when_already_stopped_returns_error() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         mesh.start().unwrap();
         mesh.stop().unwrap();
         assert!(matches!(mesh.stop().unwrap_err(), MeshError::NotRunning));
@@ -832,7 +832,7 @@ mod tests {
             node_id: Some("status-node".to_string()),
             ..Default::default()
         };
-        let mesh = EcheMesh::new(cfg);
+        let mesh = PeatMesh::new(cfg);
         let status = mesh.status();
         assert_eq!(status.state, MeshState::Created);
         assert_eq!(status.peer_count, 0);
@@ -842,7 +842,7 @@ mod tests {
 
     #[test]
     fn test_status_while_running() {
-        let mesh = EcheMesh::new(MeshConfig {
+        let mesh = PeatMesh::new(MeshConfig {
             node_id: Some("running-node".to_string()),
             ..Default::default()
         });
@@ -857,7 +857,7 @@ mod tests {
     #[test]
     fn test_status_peer_count_with_transport() {
         let peers = vec![NodeId::new("p1".into()), NodeId::new("p2".into())];
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         mesh.set_transport(Arc::new(MockTransport::new(peers)));
         let status = mesh.status();
         assert_eq!(status.peer_count, 2);
@@ -875,7 +875,7 @@ mod tests {
             },
             ..Default::default()
         };
-        let mesh = EcheMesh::new(cfg);
+        let mesh = PeatMesh::new(cfg);
         assert_eq!(mesh.config().node_id.as_deref(), Some("cfg-test"));
         assert!(!mesh.config().discovery.mdns_enabled);
     }
@@ -884,7 +884,7 @@ mod tests {
 
     #[test]
     fn test_subscribe_events_receives_state_changes() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let mut rx = mesh.subscribe_events();
 
         mesh.start().unwrap();
@@ -893,18 +893,18 @@ mod tests {
         let evt1 = rx.try_recv().unwrap();
         assert!(matches!(
             evt1,
-            EcheMeshEvent::StateChanged(MeshState::Starting)
+            PeatMeshEvent::StateChanged(MeshState::Starting)
         ));
         let evt2 = rx.try_recv().unwrap();
         assert!(matches!(
             evt2,
-            EcheMeshEvent::StateChanged(MeshState::Running)
+            PeatMeshEvent::StateChanged(MeshState::Running)
         ));
     }
 
     #[test]
     fn test_subscribe_events_receives_stop_events() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let mut rx = mesh.subscribe_events();
 
         mesh.start().unwrap();
@@ -917,18 +917,18 @@ mod tests {
         let evt1 = rx.try_recv().unwrap();
         assert!(matches!(
             evt1,
-            EcheMeshEvent::StateChanged(MeshState::Stopping)
+            PeatMeshEvent::StateChanged(MeshState::Stopping)
         ));
         let evt2 = rx.try_recv().unwrap();
         assert!(matches!(
             evt2,
-            EcheMeshEvent::StateChanged(MeshState::Stopped)
+            PeatMeshEvent::StateChanged(MeshState::Stopped)
         ));
     }
 
     #[test]
     fn test_multiple_subscribers() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let mut rx1 = mesh.subscribe_events();
         let mut rx2 = mesh.subscribe_events();
 
@@ -943,7 +943,7 @@ mod tests {
 
     #[test]
     fn test_set_transport() {
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.transport().is_none());
 
         mesh.set_transport(Arc::new(MockTransport::empty()));
@@ -955,7 +955,7 @@ mod tests {
         use crate::beacon::HierarchyLevel;
         use crate::hierarchy::{NodeRole, StaticHierarchyStrategy};
 
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.hierarchy().is_none());
 
         let strategy = StaticHierarchyStrategy {
@@ -968,7 +968,7 @@ mod tests {
 
     #[test]
     fn test_router_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.router().is_none());
     }
 
@@ -1067,18 +1067,18 @@ mod tests {
         assert!(debug.contains("NotRunning"));
     }
 
-    // ── EcheMeshEvent ────────────────────────────────────────────
+    // ── PeatMeshEvent ────────────────────────────────────────────
 
     #[test]
     fn test_event_state_changed() {
-        let evt = EcheMeshEvent::StateChanged(MeshState::Running);
+        let evt = PeatMeshEvent::StateChanged(MeshState::Running);
         let debug = format!("{:?}", evt);
         assert!(debug.contains("Running"));
     }
 
     #[test]
     fn test_event_peer_joined() {
-        let evt = EcheMeshEvent::PeerJoined(NodeId::new("peer-1".into()));
+        let evt = PeatMeshEvent::PeerJoined(NodeId::new("peer-1".into()));
         let cloned = evt.clone();
         let debug = format!("{:?}", cloned);
         assert!(debug.contains("peer-1"));
@@ -1086,7 +1086,7 @@ mod tests {
 
     #[test]
     fn test_event_peer_left() {
-        let evt = EcheMeshEvent::PeerLeft(NodeId::new("peer-2".into()));
+        let evt = PeatMeshEvent::PeerLeft(NodeId::new("peer-2".into()));
         let cloned = evt.clone();
         let debug = format!("{:?}", cloned);
         assert!(debug.contains("peer-2"));
@@ -1097,7 +1097,7 @@ mod tests {
         let topo_evt = crate::topology::TopologyEvent::PeerLost {
             lost_peer_id: "gone".to_string(),
         };
-        let evt = EcheMeshEvent::TopologyChanged(Box::new(topo_evt));
+        let evt = PeatMeshEvent::TopologyChanged(Box::new(topo_evt));
         let cloned = evt.clone();
         let debug = format!("{:?}", cloned);
         assert!(debug.contains("gone"));
@@ -1131,11 +1131,11 @@ mod tests {
         assert_eq!(cloned.node_id, "n2");
     }
 
-    // ── EcheMeshBuilder ──────────────────────────────────────────
+    // ── PeatMeshBuilder ──────────────────────────────────────────
 
     #[test]
     fn test_builder_minimal() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default()).build();
+        let mesh = PeatMeshBuilder::new(MeshConfig::default()).build();
         assert_eq!(mesh.state(), MeshState::Created);
         assert!(mesh.transport().is_none());
         assert!(mesh.hierarchy().is_none());
@@ -1148,13 +1148,13 @@ mod tests {
             node_id: Some("builder-node".to_string()),
             ..Default::default()
         };
-        let mesh = EcheMeshBuilder::new(cfg).build();
+        let mesh = PeatMeshBuilder::new(cfg).build();
         assert_eq!(mesh.node_id(), "builder-node");
     }
 
     #[test]
     fn test_builder_with_transport() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_transport(Arc::new(MockTransport::empty()))
             .build();
         assert!(mesh.transport().is_some());
@@ -1169,7 +1169,7 @@ mod tests {
             assigned_level: HierarchyLevel::Squad,
             assigned_role: NodeRole::Member,
         };
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_hierarchy(Arc::new(strategy))
             .build();
         assert!(mesh.hierarchy().is_some());
@@ -1178,7 +1178,7 @@ mod tests {
     #[test]
     fn test_builder_with_router() {
         let router = MeshRouter::with_node_id("test");
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_router(router)
             .build();
         assert!(mesh.router().is_some());
@@ -1196,7 +1196,7 @@ mod tests {
         let peers = vec![NodeId::new("p1".into())];
         let router = MeshRouter::with_node_id("full");
 
-        let mesh = EcheMeshBuilder::new(MeshConfig {
+        let mesh = PeatMeshBuilder::new(MeshConfig {
             node_id: Some("full-node".to_string()),
             ..Default::default()
         })
@@ -1214,7 +1214,7 @@ mod tests {
 
     #[test]
     fn test_builder_lifecycle() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default()).build();
+        let mesh = PeatMeshBuilder::new(MeshConfig::default()).build();
         assert!(mesh.start().is_ok());
         assert_eq!(mesh.state(), MeshState::Running);
         assert!(mesh.stop().is_ok());
@@ -1225,14 +1225,14 @@ mod tests {
 
     #[test]
     fn test_transport_manager_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.transport_manager().is_none());
     }
 
     #[test]
     fn test_set_transport_manager() {
         use crate::transport::TransportManagerConfig;
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         let tm = TransportManager::new(TransportManagerConfig::default());
         mesh.set_transport_manager(tm);
         assert!(mesh.transport_manager().is_some());
@@ -1242,7 +1242,7 @@ mod tests {
     fn test_builder_with_transport_manager() {
         use crate::transport::TransportManagerConfig;
         let tm = TransportManager::new(TransportManagerConfig::default());
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_transport_manager(tm)
             .build();
         assert!(mesh.transport_manager().is_some());
@@ -1262,7 +1262,7 @@ mod tests {
         let router = MeshRouter::with_node_id("full");
         let tm = TransportManager::new(TransportManagerConfig::default());
 
-        let mesh = EcheMeshBuilder::new(MeshConfig {
+        let mesh = PeatMeshBuilder::new(MeshConfig {
             node_id: Some("full-tm-node".to_string()),
             ..Default::default()
         })
@@ -1283,33 +1283,33 @@ mod tests {
 
     #[test]
     fn test_bandwidth_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.bandwidth().is_none());
     }
 
     #[test]
     fn test_set_bandwidth() {
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         mesh.set_bandwidth(crate::qos::BandwidthAllocation::new(1_000_000));
         assert!(mesh.bandwidth().is_some());
     }
 
     #[test]
     fn test_preemption_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.preemption().is_none());
     }
 
     #[test]
     fn test_set_preemption() {
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         mesh.set_preemption(crate::qos::PreemptionController::new());
         assert!(mesh.preemption().is_some());
     }
 
     #[test]
     fn test_builder_with_bandwidth() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_bandwidth(crate::qos::BandwidthAllocation::default_tactical())
             .build();
         assert!(mesh.bandwidth().is_some());
@@ -1317,7 +1317,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_preemption() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_preemption(crate::qos::PreemptionController::new())
             .build();
         assert!(mesh.preemption().is_some());
@@ -1327,26 +1327,26 @@ mod tests {
 
     #[test]
     fn test_device_keypair_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.device_keypair().is_none());
     }
 
     #[test]
     fn test_set_device_keypair() {
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         mesh.set_device_keypair(crate::security::DeviceKeypair::generate());
         assert!(mesh.device_keypair().is_some());
     }
 
     #[test]
     fn test_formation_key_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.formation_key().is_none());
     }
 
     #[test]
     fn test_set_formation_key() {
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         mesh.set_formation_key(crate::security::FormationKey::new(
             "test-formation",
             &[0u8; 32],
@@ -1356,7 +1356,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_device_keypair() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_device_keypair(crate::security::DeviceKeypair::generate())
             .build();
         assert!(mesh.device_keypair().is_some());
@@ -1364,14 +1364,14 @@ mod tests {
 
     #[test]
     fn test_builder_with_device_keypair_from_seed() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_device_keypair_from_seed(b"k8s-secret", "pod-1")
             .unwrap()
             .build();
         assert!(mesh.device_keypair().is_some());
 
         // Same seed+context should produce the same device ID
-        let mesh2 = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh2 = PeatMeshBuilder::new(MeshConfig::default())
             .with_device_keypair_from_seed(b"k8s-secret", "pod-1")
             .unwrap()
             .build();
@@ -1383,7 +1383,7 @@ mod tests {
 
     #[test]
     fn test_builder_with_formation_key() {
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_formation_key(crate::security::FormationKey::new("f1", &[1u8; 32]))
             .build();
         assert!(mesh.formation_key().is_some());
@@ -1393,13 +1393,13 @@ mod tests {
 
     #[test]
     fn test_discovery_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.discovery().read().unwrap().is_none());
     }
 
     #[test]
     fn test_set_discovery() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let strategy = crate::discovery::HybridDiscovery::new();
         mesh.set_discovery(Box::new(strategy));
         assert!(mesh.discovery().read().unwrap().is_some());
@@ -1408,7 +1408,7 @@ mod tests {
     #[test]
     fn test_builder_with_discovery() {
         let strategy = crate::discovery::HybridDiscovery::new();
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_discovery(Box::new(strategy))
             .build();
         assert!(mesh.discovery().read().unwrap().is_some());
@@ -1422,7 +1422,7 @@ mod tests {
 
     #[test]
     fn test_beacon_broadcaster_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.beacon_broadcaster().is_none());
     }
 
@@ -1430,7 +1430,7 @@ mod tests {
     fn test_set_beacon_broadcaster() {
         use crate::beacon::{BeaconBroadcaster, GeoPosition, HierarchyLevel};
 
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         let bb = BeaconBroadcaster::new(
             mock_storage(),
             "test-node".to_string(),
@@ -1449,7 +1449,7 @@ mod tests {
 
     #[test]
     fn test_beacon_observer_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.beacon_observer().is_none());
     }
 
@@ -1457,7 +1457,7 @@ mod tests {
     fn test_set_beacon_observer() {
         use crate::beacon::BeaconObserver;
 
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         let bo = Arc::new(BeaconObserver::new(mock_storage(), "s00000".to_string()));
         mesh.set_beacon_observer(bo);
         assert!(mesh.beacon_observer().is_some());
@@ -1465,7 +1465,7 @@ mod tests {
 
     #[test]
     fn test_beacon_janitor_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.beacon_janitor().is_none());
     }
 
@@ -1474,7 +1474,7 @@ mod tests {
         use crate::beacon::BeaconJanitor;
         use std::collections::HashMap;
 
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         let nearby = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
         let bj = BeaconJanitor::new(nearby, Duration::from_secs(60), Duration::from_secs(10));
         mesh.set_beacon_janitor(bj);
@@ -1497,7 +1497,7 @@ mod tests {
             None,
             Duration::from_secs(5),
         );
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_beacon_broadcaster(bb)
             .build();
         assert!(mesh.beacon_broadcaster().is_some());
@@ -1508,7 +1508,7 @@ mod tests {
         use crate::beacon::BeaconObserver;
 
         let bo = Arc::new(BeaconObserver::new(mock_storage(), "s00000".to_string()));
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_beacon_observer(bo)
             .build();
         assert!(mesh.beacon_observer().is_some());
@@ -1521,7 +1521,7 @@ mod tests {
 
         let nearby = Arc::new(tokio::sync::RwLock::new(HashMap::new()));
         let bj = BeaconJanitor::new(nearby, Duration::from_secs(60), Duration::from_secs(10));
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_beacon_janitor(bj)
             .build();
         assert!(mesh.beacon_janitor().is_some());
@@ -1531,7 +1531,7 @@ mod tests {
 
     #[test]
     fn test_topology_manager_initially_none() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         assert!(mesh.topology_manager().is_none());
     }
 
@@ -1540,7 +1540,7 @@ mod tests {
         use crate::beacon::{BeaconObserver, GeoPosition, HierarchyLevel};
         use crate::topology::{TopologyBuilder, TopologyConfig, TopologyManager};
 
-        let mut mesh = EcheMesh::new(MeshConfig::default());
+        let mut mesh = PeatMesh::new(MeshConfig::default());
         let observer = Arc::new(BeaconObserver::new(mock_storage(), "s00000".to_string()));
         let builder = TopologyBuilder::new(
             TopologyConfig::default(),
@@ -1580,7 +1580,7 @@ mod tests {
         );
         let transport: Arc<dyn MeshTransport> = Arc::new(MockTransport::empty());
         let tm = TopologyManager::new(builder, transport);
-        let mesh = EcheMeshBuilder::new(MeshConfig::default())
+        let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_topology_manager(tm)
             .build();
         assert!(mesh.topology_manager().is_some());
@@ -1597,7 +1597,7 @@ mod broker_tests {
 
     #[test]
     fn test_broker_node_info() {
-        let mesh = EcheMesh::new(MeshConfig {
+        let mesh = PeatMesh::new(MeshConfig {
             node_id: Some("broker-node".to_string()),
             ..Default::default()
         });
@@ -1609,7 +1609,7 @@ mod broker_tests {
 
     #[test]
     fn test_broker_node_info_with_uptime() {
-        let mesh = EcheMesh::new(MeshConfig {
+        let mesh = PeatMesh::new(MeshConfig {
             node_id: Some("uptime-node".to_string()),
             ..Default::default()
         });
@@ -1621,21 +1621,21 @@ mod broker_tests {
 
     #[tokio::test]
     async fn test_broker_list_peers_no_transport() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let peers = mesh.list_peers().await;
         assert!(peers.is_empty());
     }
 
     #[tokio::test]
     async fn test_broker_get_peer_no_transport() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let peer = mesh.get_peer("unknown").await;
         assert!(peer.is_none());
     }
 
     #[test]
     fn test_broker_topology() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let topo = mesh.topology();
         assert_eq!(topo.peer_count, 0);
         assert_eq!(topo.role, "standalone");
@@ -1644,7 +1644,7 @@ mod broker_tests {
 
     #[test]
     fn test_broker_subscribe_events() {
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let _rx = MeshBrokerState::subscribe_events(&mesh);
         // Receiver is valid (won't panic)
     }
@@ -1653,7 +1653,7 @@ mod broker_tests {
     fn test_broker_event_bridge() {
         use crate::broker::state::MeshEvent;
 
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let mut rx = MeshBrokerState::subscribe_events(&mesh);
 
         // Emit a broker event via the public API
@@ -1673,7 +1673,7 @@ mod broker_tests {
     fn test_broker_event_bridge_start_emits_topology() {
         use crate::broker::state::MeshEvent;
 
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         let mut rx = MeshBrokerState::subscribe_events(&mesh);
 
         mesh.start().unwrap();
@@ -1689,7 +1689,7 @@ mod broker_tests {
     fn test_broker_event_bridge_stop_emits_topology() {
         use crate::broker::state::MeshEvent;
 
-        let mesh = EcheMesh::new(MeshConfig::default());
+        let mesh = PeatMesh::new(MeshConfig::default());
         mesh.start().unwrap();
 
         let mut rx = MeshBrokerState::subscribe_events(&mesh);

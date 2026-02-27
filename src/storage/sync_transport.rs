@@ -2,7 +2,7 @@
 //!
 //! These traits decouple the sync coordinator from concrete transport
 //! implementations (e.g., IrohTransport) and routing strategies (e.g.,
-//! HierarchicalRouter), enabling reuse across eche-mesh and eche-mesh-node.
+//! HierarchicalRouter), enabling reuse across peat-mesh and peat-mesh-node.
 
 use async_trait::async_trait;
 use iroh::endpoint::Connection;
@@ -10,7 +10,7 @@ use iroh::EndpointId;
 
 use super::automerge_sync::SyncDirection;
 
-/// ALPN protocol identifier for Eche Protocol Automerge sync
+/// ALPN protocol identifier for Peat Protocol Automerge sync
 pub const CAP_AUTOMERGE_ALPN: &[u8] = b"cap/automerge/1";
 
 /// Transport abstraction for sync operations

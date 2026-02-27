@@ -12,7 +12,7 @@ use tracing::{debug, info, warn};
 ///
 /// Example usage:
 /// ```no_run
-/// use eche_mesh::discovery::{HybridDiscovery, MdnsDiscovery, StaticDiscovery};
+/// use peat_mesh::discovery::{HybridDiscovery, MdnsDiscovery, StaticDiscovery};
 /// use std::path::Path;
 ///
 /// # async fn example() -> Result<(), Box<dyn std::error::Error>> {

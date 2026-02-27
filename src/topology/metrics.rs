@@ -51,7 +51,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::topology::{TopologyConfig, TopologyMetrics, InMemoryMetricsCollector};
+//! use peat_mesh::topology::{TopologyConfig, TopologyMetrics, InMemoryMetricsCollector};
 //! use std::sync::Arc;
 //!
 //! // Create metrics collector

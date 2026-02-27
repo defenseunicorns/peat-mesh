@@ -35,8 +35,8 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::routing::{SelectiveRouter, DataPacket, DataDirection};
-//! use eche_mesh::topology::TopologyState;
+//! use peat_mesh::routing::{SelectiveRouter, DataPacket, DataDirection};
+//! use peat_mesh::topology::TopologyState;
 //!
 //! let router = SelectiveRouter::new();
 //! let state = get_topology_state();

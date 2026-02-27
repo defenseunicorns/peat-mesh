@@ -1,6 +1,6 @@
 # ADR-0005: End-to-End Encryption and Key Management
 
-> **Provenance**: Transferred from eche repo ADR-044. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-044. Renumbered for peat-mesh.
 
 **Status**: Proposed
 **Date**: 2025-01-07
@@ -9,7 +9,7 @@
 
 ## Context
 
-The Eche Protocol has a solid security foundation (ADR-006) with:
+The Peat Protocol has a solid security foundation (ADR-006) with:
 - Device identity (Ed25519 keypairs)
 - Peer-to-peer encryption (X25519 + ChaCha20-Poly1305)
 - Formation keys (pre-shared secret authentication)
@@ -29,7 +29,7 @@ The current `GroupKey` implementation can generate and rotate keys, but has no p
 Kerkour's research notes highlight a critical insight:
 > "Removing server-side validation creates vulnerability where malicious clients could introduce invalid mutations, compromising data structure integrity."
 
-In Eche's mesh topology:
+In Peat's mesh topology:
 - Any node can propose CRDT mutations
 - Compromised nodes could inject malformed documents
 - Replay attacks could revert document state
@@ -72,7 +72,7 @@ We will integrate the Messaging Layer Security protocol for cell-level key manag
 | X.509 Support | Limited | Full |
 | Audit Status | Partial | None |
 
-OpenMLS aligns with Eche's existing crypto (ChaCha20-Poly1305, Ed25519) and has more real-world deployment experience.
+OpenMLS aligns with Peat's existing crypto (ChaCha20-Poly1305, Ed25519) and has more real-world deployment experience.
 
 ### Architecture
 
@@ -428,7 +428,7 @@ pub enum BypassAuthMode {
 | **Simplicity** | Just a keypair | Certificate chains, CAs, validity periods |
 | **Key size** | 32 bytes public | ~1-2KB per cert |
 | **Revocation** | Manual tracking | CRL/OCSP infrastructure |
-| **Interop** | Eche-specific | DoD PKI, NATO systems |
+| **Interop** | Peat-specific | DoD PKI, NATO systems |
 | **Metadata** | None built-in | Org unit, clearance, role in cert |
 | **Offline validation** | Always works | Needs cached CRLs |
 
@@ -436,7 +436,7 @@ pub enum BypassAuthMode {
 
 ```rust
 /// Abstraction over credential types
-pub enum EcheCredential {
+pub enum PeatCredential {
     /// Simple Ed25519 public key (current implementation)
     Ed25519(DeviceKeypair),
     /// X.509 certificate chain (future, if needed)
@@ -446,7 +446,7 @@ pub enum EcheCredential {
 
 ## Hardware Root of Trust
 
-For tactical deployment, software-only keys are insufficient. Captured devices could have keys extracted. Eche should support hardware-backed identity where available.
+For tactical deployment, software-only keys are insufficient. Captured devices could have keys extracted. Peat should support hardware-backed identity where available.
 
 ### Physical Unclonable Functions (PUFs)
 
@@ -520,13 +520,13 @@ pub struct PufDeviceIdentity {
 impl PufDeviceIdentity {
     pub fn from_puf(puf: &dyn PufProvider) -> Result<Self> {
         let response = puf.reconstruct(
-            ECHE_PUF_CHALLENGE,
+            PEAT_PUF_CHALLENGE,
             &puf.get_helper_data()?
         )?;
 
         // Derive separate keys for signing and encryption
-        let signing_seed = hkdf_expand(&response, b"eche-signing-v1");
-        let encryption_seed = hkdf_expand(&response, b"eche-encryption-v1");
+        let signing_seed = hkdf_expand(&response, b"peat-signing-v1");
+        let encryption_seed = hkdf_expand(&response, b"peat-encryption-v1");
 
         Ok(Self {
             signing_key: DeviceKeypair::from_seed(&signing_seed),
@@ -573,7 +573,7 @@ pub enum AttestationProof {
 
 ### Hardware Support Matrix
 
-| Platform | PUF | TPM | Secure Enclave | Eche Target |
+| Platform | PUF | TPM | Secure Enclave | Peat Target |
 |----------|-----|-----|----------------|-------------|
 | NXP i.MX RT | ✅ SRAM PUF | ❌ | ✅ TrustZone | UAVs, edge |
 | Microchip ATECC608 | ✅ Built-in | ❌ | ✅ Secure element | Small UAS, sensors |

@@ -17,7 +17,7 @@ use std::fmt;
 use std::time::Instant;
 use tokio::sync::mpsc;
 
-// Submodules moved from eche-protocol (ADR-049 Phase 2)
+// Submodules moved from peat-protocol (ADR-049 Phase 2)
 pub mod bypass;
 pub mod capabilities;
 pub mod health;
@@ -60,7 +60,7 @@ pub use lite::{
 pub use lite_ota::{FirmwareImage, OtaSender, OtaStatusInfo};
 
 #[cfg(feature = "bluetooth")]
-pub use btle::EcheBleTransport;
+pub use btle::PeatBleTransport;
 
 // =============================================================================
 // Node Identity

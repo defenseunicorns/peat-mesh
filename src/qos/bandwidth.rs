@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```
-//! use eche_mesh::qos::{QoSClass, BandwidthAllocation};
+//! use peat_mesh::qos::{QoSClass, BandwidthAllocation};
 //!
 //! // Create default tactical allocation for 1 Mbps link
 //! let allocation = BandwidthAllocation::default_tactical();

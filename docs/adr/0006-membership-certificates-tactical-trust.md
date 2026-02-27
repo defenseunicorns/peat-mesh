@@ -1,6 +1,6 @@
 # ADR-0006: Membership Certificates and Tactical Trust
 
-> **Provenance**: Transferred from eche repo ADR-048. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-048. Renumbered for peat-mesh.
 
 **Status**: Proposed
 **Date**: 2025-01-29
@@ -243,7 +243,7 @@ Unknown or invalid certificates → reject peer, do not sync.
 ### Neutral
 
 - Coexists with ADR-006 PKI model for enterprise deployments
-- peat-btle provides crypto primitives, Eche implements policy
+- peat-btle provides crypto primitives, Peat implements policy
 
 ## Implementation
 
@@ -253,14 +253,14 @@ Unknown or invalid certificates → reject peer, do not sync.
 |-------|----------------|
 | **peat-btle** | Ed25519 sign/verify, IdentityAttestation, peer pubkey registry |
 | **peat-lite** | Signed wire formats (86-byte CannedMessage) |
-| **Eche** | MembershipCertificate, enrollment protocol, auth policy, UX |
+| **Peat** | MembershipCertificate, enrollment protocol, auth policy, UX |
 | **Apps** | Enrollment UI, QR display/scan, callsign assignment |
 
 ### Related Issues
 
 - **peat-btle** `cac154cc`: Crypto primitives (sign/verify utilities)
 - **peat-lite** `2140b82a`: Signed CannedMessage wire format
-- **Eche** `23505348`: Membership certificates, enrollment, trust hierarchy
+- **Peat** `23505348`: Membership certificates, enrollment, trust hierarchy
 
 ## References
 
