@@ -1,4 +1,4 @@
-//! OTA firmware sender for Eche-Lite nodes.
+//! OTA firmware sender for Peat-Lite nodes.
 //!
 //! Manages firmware delivery from a Full Eche node to one or more Lite peers
 //! using the OTA wire protocol (message types 0x10-0x16) over the existing
@@ -19,9 +19,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-// Re-export OTA constants from eche-lite-protocol (single source of truth)
-use eche_lite_protocol::ota::{OTA_ABORT_TOO_MANY_RETRIES, OTA_RESULT_SUCCESS};
-pub use eche_lite_protocol::ota::{OTA_CHUNK_DATA_SIZE, OTA_FLAG_SIGNED};
+// Re-export OTA constants from peat-lite-protocol (single source of truth)
+use peat_lite_protocol::ota::{OTA_ABORT_TOO_MANY_RETRIES, OTA_RESULT_SUCCESS};
+pub use peat_lite_protocol::ota::{OTA_CHUNK_DATA_SIZE, OTA_FLAG_SIGNED};
 
 /// Timeout before retransmitting a chunk
 const CHUNK_TIMEOUT: Duration = Duration::from_millis(500);
