@@ -65,8 +65,8 @@ use super::{
     PEER_EVENT_CHANNEL_CAPACITY,
 };
 
-// Re-export wire protocol types from peat-lite-protocol (single source of truth)
-pub use peat_lite_protocol::{
+// Re-export wire protocol types from peat-lite (single source of truth)
+pub use peat_lite::{
     CrdtType, MessageType, DEFAULT_PORT, HEADER_SIZE, MAGIC, MAX_PACKET_SIZE, PROTOCOL_VERSION,
 };
 
@@ -160,8 +160,8 @@ impl QueryRequest {
     }
 }
 
-/// Capability flags (ADR-035) — re-exported from peat-lite-protocol
-pub use peat_lite_protocol::NodeCapabilities as LiteCapabilities;
+/// Capability flags (ADR-035) — re-exported from peat-lite
+pub use peat_lite::NodeCapabilities as LiteCapabilities;
 
 /// Backward-compatibility alias: `FULL_CRDT` maps to `DOCUMENT_CRDT` in
 /// peat-lite-protocol (same bit 0x0004).
