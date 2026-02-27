@@ -14,7 +14,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! use eche_mesh::transport::reconnection::{ReconnectionPolicy, ReconnectionManager};
+//! use peat_mesh::transport::reconnection::{ReconnectionPolicy, ReconnectionManager};
 //!
 //! let policy = ReconnectionPolicy::default();
 //! let mut manager = ReconnectionManager::new(policy);

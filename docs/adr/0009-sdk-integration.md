@@ -1,6 +1,6 @@
-# ADR-0009: Eche SDK Integration (Optimal Path)
+# ADR-0009: Peat SDK Integration (Optimal Path)
 
-> **Provenance**: Transferred from eche repo ADR-050. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-050. Renumbered for peat-mesh.
 
 **Status**: Proposed  
 **Date**: 2025-01-31  
@@ -13,11 +13,11 @@
 
 ## Executive Summary
 
-This ADR defines the **Eche SDK** (`eche-sdk`) - the **optimal integration path** for systems that can incorporate Eche directly. Unlike the consumer interface adapters (ADR-043), SDK integration provides:
+This ADR defines the **Peat SDK** (`peat-sdk`) - the **optimal integration path** for systems that can incorporate Peat directly. Unlike the consumer interface adapters (ADR-043), SDK integration provides:
 
 - **Full CRDT synchronization** with eventual consistency guarantees
 - **Offline operation** with automatic reconnection and sync
-- **Hierarchical participation** as a first-class Eche node
+- **Hierarchical participation** as a first-class Peat node
 - **Minimal latency** (sync latency only, no adapter overhead)
 - **Native capability aggregation** and cell membership
 
@@ -31,11 +31,11 @@ This ADR defines the **Eche SDK** (`eche-sdk`) - the **optimal integration path*
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Eche Mesh                                        │
+│                         Peat Mesh                                        │
 │                                                                          │
 │    ┌──────────┐      ┌──────────┐      ┌──────────┐      ┌──────────┐  │
 │    │  Squad   │◄────►│  UAS-1   │◄────►│  UGV-2   │◄────►│  Human   │  │
-│    │  Leader  │      │(eche-sdk)│      │(eche-sdk)│      │(eche-sdk)│  │
+│    │  Leader  │      │(peat-sdk)│      │(peat-sdk)│      │(peat-sdk)│  │
 │    └──────────┘      └──────────┘      └──────────┘      └──────────┘  │
 │         ▲                                                               │
 │         │ All nodes are equal CRDT participants                         │
@@ -56,7 +56,7 @@ vs.
 │                   Consumer Interface Architecture                        │
 │                                                                          │
 │    ┌──────────┐      ┌──────────┐                                       │
-│    │  Eche    │◄────►│  Eche    │                                       │
+│    │  Peat    │◄────►│  Peat    │                                       │
 │    │  Node    │      │  Node    │◄───HTTP/WS───► Legacy System          │
 │    └──────────┘      └──────────┘                (not a real participant)│
 │                           │                                              │
@@ -84,7 +84,7 @@ vs.
 
 ### Target Platforms
 
-The SDK targets systems where Eche can be embedded:
+The SDK targets systems where Peat can be embedded:
 
 | Platform | Language Binding | Use Case |
 |----------|------------------|----------|
@@ -105,7 +105,7 @@ The SDK targets systems where Eche can be embedded:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                            eche-sdk                                      │
+│                            peat-sdk                                      │
 │                                                                          │
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                     Language Bindings                               │ │
@@ -119,7 +119,7 @@ The SDK targets systems where Eche can be embedded:
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                     High-Level API                                  │ │
 │  │                                                                     │ │
-│  │  • EcheNode - main entry point                                     │ │
+│  │  • PeatNode - main entry point                                     │ │
 │  │  • Platform - represent this platform's state                      │ │
 │  │  • Cell - cell membership and queries                              │ │
 │  │  • Capabilities - advertise and discover                           │ │
@@ -132,7 +132,7 @@ The SDK targets systems where Eche can be embedded:
 │  │                     Core Components                                 │ │
 │  │                                                                     │ │
 │  │  ┌─────────────────┐  ┌─────────────────┐  ┌─────────────────┐    │ │
-│  │  │  eche-protocol  │  │   eche-schema   │  │  MeshProvider   │    │ │
+│  │  │  peat-protocol  │  │   peat-schema   │  │  MeshProvider   │    │ │
 │  │  │                 │  │   (ADR-049)     │  │                 │    │ │
 │  │  └─────────────────┘  └─────────────────┘  └─────────────────┘    │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
@@ -141,7 +141,7 @@ The SDK targets systems where Eche can be embedded:
 │  ┌────────────────────────────────────────────────────────────────────┐ │
 │  │                     Transport Layer (ADR-032)                       │ │
 │  │  ┌─────────┐ ┌─────────┐ ┌─────────┐ ┌─────────┐                  │ │
-│  │  │  Iroh   │ │eche-btle│ │  LoRa   │ │ Custom  │                  │ │
+│  │  │  Iroh   │ │peat-btle│ │  LoRa   │ │ Custom  │                  │ │
 │  │  │ (QUIC)  │ │  (BLE)  │ │         │ │         │                  │ │
 │  │  └─────────┘ └─────────┘ └─────────┘ └─────────┘                  │ │
 │  └────────────────────────────────────────────────────────────────────┘ │
@@ -153,26 +153,26 @@ The SDK targets systems where Eche can be embedded:
 #### Rust (Native)
 
 ```rust
-// eche-sdk/src/lib.rs
+// peat-sdk/src/lib.rs
 
-use eche_schema::eche::v1::*;
+use peat_schema::peat::v1::*;
 use std::sync::Arc;
 
-/// Main entry point for Eche integration
-pub struct EcheNode {
+/// Main entry point for Peat integration
+pub struct PeatNode {
     platform: Platform,
-    config: EcheConfig,
+    config: PeatConfig,
 }
 
-impl EcheNode {
-    /// Create a new Eche node with the given configuration
-    pub async fn new(config: EcheConfig) -> Result<Self, EcheError> {
+impl PeatNode {
+    /// Create a new Peat node with the given configuration
+    pub async fn new(config: PeatConfig) -> Result<Self, PeatError> {
         let platform = Platform::new(&config.platform_id);
         Ok(Self { platform, config })
     }
     
     /// Start the node and begin mesh participation
-    pub async fn start(&self) -> Result<(), EcheError> {
+    pub async fn start(&self) -> Result<(), PeatError> {
         self.platform.start_beacon_broadcast().await?;
         Ok(())
     }
@@ -198,7 +198,7 @@ impl EcheNode {
     }
     
     /// Send a command to another platform or cell
-    pub async fn command(&self, cmd: Command) -> Result<CommandReceipt, EcheError> {
+    pub async fn command(&self, cmd: Command) -> Result<CommandReceipt, PeatError> {
         todo!()
     }
 }
@@ -210,22 +210,22 @@ pub struct Platform {
 
 impl Platform {
     /// Update this platform's position
-    pub async fn set_position(&self, position: Position) -> Result<(), EcheError> {
+    pub async fn set_position(&self, position: Position) -> Result<(), PeatError> {
         Ok(())
     }
     
     /// Update this platform's operational status
-    pub async fn set_operational(&self, operational: bool) -> Result<(), EcheError> {
+    pub async fn set_operational(&self, operational: bool) -> Result<(), PeatError> {
         Ok(())
     }
     
     /// Advertise a capability
-    pub async fn advertise_capability(&self, cap: CapabilityAdvertisement) -> Result<(), EcheError> {
+    pub async fn advertise_capability(&self, cap: CapabilityAdvertisement) -> Result<(), PeatError> {
         Ok(())
     }
     
     /// Remove a capability advertisement
-    pub async fn remove_capability(&self, capability_id: &str) -> Result<(), EcheError> {
+    pub async fn remove_capability(&self, capability_id: &str) -> Result<(), PeatError> {
         Ok(())
     }
     
@@ -270,7 +270,7 @@ impl PlatformQuery {
     }
     
     /// Execute the query and return results
-    pub async fn execute(&self) -> Result<Vec<PlatformBeacon>, EcheError> {
+    pub async fn execute(&self) -> Result<Vec<PlatformBeacon>, PeatError> {
         Ok(vec![])
     }
 }
@@ -284,19 +284,19 @@ pub enum SpatialFilter {
 #### Python (PyO3)
 
 ```python
-# eche_sdk/__init__.py
+# peat_sdk/__init__.py
 
 import asyncio
 
 async def main():
-    # Create and start an Eche node
-    config = EcheConfig(
+    # Create and start an Peat node
+    config = PeatConfig(
         platform_id="uav-001",
         mesh_backend="automerge",  # or "ditto"
         transports=["iroh", "ble"],
     )
     
-    node = await EcheNode.create(config)
+    node = await PeatNode.create(config)
     await node.start()
     
     # Update our position
@@ -335,21 +335,21 @@ if __name__ == "__main__":
 #### Kotlin (Android/JNI)
 
 ```kotlin
-// EcheSDK.kt
+// PeatSDK.kt
 
-package com.defenseunicorns.eche
+package com.defenseunicorns.peat
 
 import kotlinx.coroutines.flow.Flow
 
-class EcheNode private constructor(
+class PeatNode private constructor(
     private val native: Long  // JNI pointer
 ) {
     companion object {
-        suspend fun create(config: EcheConfig): EcheNode {
-            return EcheNode(nativeCreate(config))
+        suspend fun create(config: PeatConfig): PeatNode {
+            return PeatNode(nativeCreate(config))
         }
         
-        private external fun nativeCreate(config: EcheConfig): Long
+        private external fun nativeCreate(config: PeatConfig): Long
     }
     
     val platform: Platform = Platform(this)
@@ -369,19 +369,19 @@ class EcheNode private constructor(
 
 // Usage in Android Activity/ViewModel
 class DroneViewModel : ViewModel() {
-    private lateinit var eche: EcheNode
+    private lateinit var peat: PeatNode
     
     fun initialize() {
         viewModelScope.launch {
-            eche = EcheNode.create(EcheConfig(
+            peat = PeatNode.create(PeatConfig(
                 platformId = "android-${Build.SERIAL}",
                 meshBackend = MeshBackend.AUTOMERGE,
                 transports = listOf(Transport.IROH, Transport.BLE),
             ))
-            eche.start()
+            peat.start()
 
             // Observe nearby platforms
-            eche.platforms()
+            peat.platforms()
                 .withinRadius(currentPosition, 5000.0)
                 .subscribe()
                 .collect { platform ->
@@ -395,13 +395,13 @@ class DroneViewModel : ViewModel() {
 #### Go (cgo)
 
 ```go
-// eche-sdk-go/eche.go
+// peat-sdk-go/peat.go
 
-package eche
+package peat
 
 /*
-#cgo LDFLAGS: -leche_sdk
-#include "eche_sdk.h"
+#cgo LDFLAGS: -lpeat_sdk
+#include "peat_sdk.h"
 */
 import "C"
 import (
@@ -410,12 +410,12 @@ import (
     "unsafe"
 )
 
-// EcheNode represents an Eche mesh participant
-type EcheNode struct {
+// PeatNode represents an Peat mesh participant
+type PeatNode struct {
     ptr unsafe.Pointer
 }
 
-// Config for creating a EcheNode
+// Config for creating a PeatNode
 type Config struct {
     PlatformID   string      `json:"platform_id"`
     MeshBackend  string      `json:"mesh_backend"` // "automerge" or "ditto"
@@ -423,23 +423,23 @@ type Config struct {
     BeaconInterval int       `json:"beacon_interval_secs"`
 }
 
-// NewEcheNode creates a new Eche node
-func NewEcheNode(cfg Config) (*EcheNode, error) {
+// NewPeatNode creates a new Peat node
+func NewPeatNode(cfg Config) (*PeatNode, error) {
     cfgJSON, _ := json.Marshal(cfg)
     cConfig := C.CString(string(cfgJSON))
     defer C.free(unsafe.Pointer(cConfig))
     
-    ptr := C.eche_node_create(cConfig)
+    ptr := C.peat_node_create(cConfig)
     if ptr == nil {
-        return nil, fmt.Errorf("failed to create EcheNode")
+        return nil, fmt.Errorf("failed to create PeatNode")
     }
     
-    return &EcheNode{ptr: ptr}, nil
+    return &PeatNode{ptr: ptr}, nil
 }
 
 // Start begins mesh participation
-func (h *EcheNode) Start(ctx context.Context) error {
-    result := C.eche_node_start(h.ptr)
+func (h *PeatNode) Start(ctx context.Context) error {
+    result := C.peat_node_start(h.ptr)
     if result != 0 {
         return fmt.Errorf("failed to start: %d", result)
     }
@@ -447,8 +447,8 @@ func (h *EcheNode) Start(ctx context.Context) error {
 }
 
 // SetPosition updates this platform's position
-func (h *EcheNode) SetPosition(lat, lon, alt float64) error {
-    result := C.eche_platform_set_position(h.ptr, C.double(lat), C.double(lon), C.double(alt))
+func (h *PeatNode) SetPosition(lat, lon, alt float64) error {
+    result := C.peat_platform_set_position(h.ptr, C.double(lat), C.double(lon), C.double(alt))
     if result != 0 {
         return fmt.Errorf("failed to set position: %d", result)
     }
@@ -465,13 +465,13 @@ type Platform struct {
 }
 
 // QueryPlatforms returns platforms matching the query
-func (h *EcheNode) QueryPlatforms(opts QueryOpts) ([]Platform, error) {
+func (h *PeatNode) QueryPlatforms(opts QueryOpts) ([]Platform, error) {
     optsJSON, _ := json.Marshal(opts)
     cOpts := C.CString(string(optsJSON))
     defer C.free(unsafe.Pointer(cOpts))
     
     var resultLen C.int
-    resultPtr := C.eche_query_platforms(h.ptr, cOpts, &resultLen)
+    resultPtr := C.peat_query_platforms(h.ptr, cOpts, &resultLen)
     if resultPtr == nil {
         return nil, fmt.Errorf("query failed")
     }
@@ -485,7 +485,7 @@ func (h *EcheNode) QueryPlatforms(opts QueryOpts) ([]Platform, error) {
 }
 
 // SubscribePlatforms returns a channel of platform updates
-func (h *EcheNode) SubscribePlatforms(ctx context.Context) (<-chan Platform, error) {
+func (h *PeatNode) SubscribePlatforms(ctx context.Context) (<-chan Platform, error) {
     ch := make(chan Platform, 100)
     
     go func() {
@@ -498,8 +498,8 @@ func (h *EcheNode) SubscribePlatforms(ctx context.Context) (<-chan Platform, err
 }
 
 // Close shuts down the node
-func (h *EcheNode) Close() error {
-    C.eche_node_destroy(h.ptr)
+func (h *PeatNode) Close() error {
+    C.peat_node_destroy(h.ptr)
     h.ptr = nil
     return nil
 }
@@ -515,15 +515,15 @@ import (
     "os"
     "os/signal"
     
-    "github.com/defenseunicorns/eche-sdk-go"
+    "github.com/defenseunicorns/peat-sdk-go"
 )
 
 func main() {
     ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt)
     defer cancel()
     
-    // Create Eche node for this operator instance
-    node, err := eche.NewEcheNode(eche.Config{
+    // Create Peat node for this operator instance
+    node, err := peat.NewPeatNode(peat.Config{
         PlatformID:  os.Getenv("HOSTNAME"),
         MeshBackend: "automerge",
         Transports:  []string{"iroh"},
@@ -555,30 +555,30 @@ func main() {
 #### ROS2 Integration
 
 ```rust
-// eche-ros2-bridge/src/lib.rs
+// peat-ros2-bridge/src/lib.rs
 
-use eche_sdk::EcheNode;
+use peat_sdk::PeatNode;
 
-/// ROS2 bridge that publishes Eche state as ROS2 topics
-/// and subscribes to ROS2 topics to update Eche state
-pub struct EcheRos2Bridge {
-    eche: EcheNode,
+/// ROS2 bridge that publishes Peat state as ROS2 topics
+/// and subscribes to ROS2 topics to update Peat state
+pub struct PeatRos2Bridge {
+    peat: PeatNode,
     // ROS2 node, publishers, subscribers...
 }
 
-impl EcheRos2Bridge {
-    pub async fn new(eche_config: EcheConfig) -> Result<Self> {
-        let eche = EcheNode::new(eche_config).await?;
-        Ok(Self { eche })
+impl PeatRos2Bridge {
+    pub async fn new(peat_config: PeatConfig) -> Result<Self> {
+        let peat = PeatNode::new(peat_config).await?;
+        Ok(Self { peat })
     }
     
     pub async fn run(&mut self) -> Result<()> {
-        self.eche.start().await?;
+        self.peat.start().await?;
 
         loop {
             tokio::select! {
-                // ROS2 odometry -> Eche position
-                // Eche platform updates -> ROS2 topics
+                // ROS2 odometry -> Peat position
+                // Peat platform updates -> ROS2 topics
             }
         }
     }
@@ -592,7 +592,7 @@ impl EcheRos2Bridge {
 ```rust
 /// SDK configuration
 #[derive(Debug, Clone)]
-pub struct EcheConfig {
+pub struct PeatConfig {
     /// Unique identifier for this platform
     pub platform_id: String,
     
@@ -653,8 +653,8 @@ pub enum TransportConfig {
 
 ### Phase 1: Core Rust SDK (Week 1-3)
 
-- [ ] Create `eche-sdk` crate
-- [ ] Implement EcheNode, Platform, PlatformQuery
+- [ ] Create `peat-sdk` crate
+- [ ] Implement PeatNode, Platform, PlatformQuery
 - [ ] Implement subscription system
 - [ ] Unit tests with MockMeshProvider
 - [ ] Integration tests with real mesh
@@ -665,11 +665,11 @@ pub enum TransportConfig {
 
 - [ ] PyO3 bindings for core types
 - [ ] Async support via pyo3-asyncio
-- [ ] Python package structure (eche_sdk)
+- [ ] Python package structure (peat_sdk)
 - [ ] PyPI publication pipeline
 - [ ] Python examples and documentation
 
-**Deliverable**: `pip install eche-sdk` works
+**Deliverable**: `pip install peat-sdk` works
 
 ### Phase 3: Go Bindings (Week 6-7)
 
@@ -680,7 +680,7 @@ pub enum TransportConfig {
 - [ ] Zarf/UDS integration example
 - [ ] Kubernetes operator example
 
-**Deliverable**: `go get github.com/defenseunicorns/eche-sdk-go` works
+**Deliverable**: `go get github.com/defenseunicorns/peat-sdk-go` works
 
 ### Phase 4: Mobile Bindings (Week 8-10)
 
@@ -694,13 +694,13 @@ pub enum TransportConfig {
 
 ### Phase 5: ROS2 Bridge (Week 11-12)
 
-- [ ] eche-ros2-bridge crate
+- [ ] peat-ros2-bridge crate
 - [ ] Standard message conversions
 - [ ] Launch file templates
 - [ ] ROS2 Humble/Iron compatibility
 - [ ] Integration with common robot platforms
 
-**Deliverable**: ROS2 robots can join Eche mesh
+**Deliverable**: ROS2 robots can join Peat mesh
 
 ### Phase 6: Documentation & Examples (Week 13-14)
 
@@ -717,11 +717,11 @@ pub enum TransportConfig {
 ## Success Criteria
 
 1. **Rust Integration**: < 50 lines of code to join mesh and broadcast position
-2. **Python Integration**: `pip install eche-sdk` + 10 lines to basic functionality
+2. **Python Integration**: `pip install peat-sdk` + 10 lines to basic functionality
 3. **Go Integration**: `go get` + idiomatic Go API with channels and context
 4. **Android Integration**: AAR dependency + Kotlin coroutines API
 5. **iOS Integration**: Swift Package Manager + async/await API
-6. **ROS2 Integration**: Single launch file to bridge robot to Eche
+6. **ROS2 Integration**: Single launch file to bridge robot to Peat
 7. **Latency**: < 50ms position sync between SDK nodes (network permitting)
 8. **Offline**: Survives 10-minute network partition, syncs on reconnect
 9. **Documentation**: New developer productive in < 1 hour per language
@@ -743,7 +743,7 @@ pub enum TransportConfig {
 
 - **Integration effort** - requires modifying target system
 - **Binary size** - SDK adds ~5-15MB depending on features
-- **Platform support** - may not work on very constrained devices (use eche-btle Lite)
+- **Platform support** - may not work on very constrained devices (use peat-btle Lite)
 - **Learning curve** - developers must understand CRDT concepts
 - **cgo overhead** - Go bindings have FFI overhead vs native Go
 
@@ -761,7 +761,7 @@ pub enum TransportConfig {
 
 **Pros**: Single integration point, simpler
 **Cons**: Loses all CRDT benefits, adds latency, no offline
-**Decision**: Rejected - defeats the purpose of Eche's architecture
+**Decision**: Rejected - defeats the purpose of Peat's architecture
 
 ### 2. WASM-Only Cross-Platform
 
@@ -793,7 +793,7 @@ pub enum TransportConfig {
 - [r2r - Rust ROS2 client](https://github.com/sequenceplanner/r2r)
 - ADR-043: Consumer Interface Adapters (Compatibility Path)
 - ADR-045: Zarf/UDS Integration
-- ADR-049: eche-mesh Extraction
+- ADR-049: peat-mesh Extraction
 
 ---
 

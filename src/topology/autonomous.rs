@@ -18,8 +18,8 @@
 //! ## Usage
 //!
 //! ```rust
-//! use eche_mesh::topology::{AutonomousOperationHandler, PartitionDetector};
-//! use eche_mesh::beacon::HierarchyLevel;
+//! use peat_mesh::topology::{AutonomousOperationHandler, PartitionDetector};
+//! use peat_mesh::beacon::HierarchyLevel;
 //! use std::sync::Arc;
 //!
 //! // Create autonomous operation handler

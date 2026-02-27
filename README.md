@@ -1,10 +1,10 @@
-# eche-mesh
+# peat-mesh
 
 Mesh networking library with CRDT sync, transport security, and topology management.
 
 ## Overview
 
-eche-mesh provides the core mesh networking layer for the Eche protocol, including:
+peat-mesh provides the core mesh networking layer for the Peat protocol, including:
 
 - **Transport** - Pluggable transports (UDP bypass, BLE) with connection health monitoring and reconnection
 - **Security** - Ed25519 identity, X25519 key exchange, ChaCha20-Poly1305 encryption, formation keys
@@ -20,7 +20,7 @@ eche-mesh provides the core mesh networking layer for the Eche protocol, includi
 
 ```toml
 [dependencies]
-eche-mesh = "0.1.0"
+peat-mesh = "0.1.0"
 ```
 
 ### Feature flags
@@ -28,25 +28,25 @@ eche-mesh = "0.1.0"
 | Feature | Description |
 |---------|-------------|
 | `automerge-backend` | Automerge CRDT storage with Iroh P2P sync and redb persistence |
-| `bluetooth` | BLE mesh transport via [eche-btle](https://crates.io/crates/eche-btle) |
+| `bluetooth` | BLE mesh transport via [peat-btle](https://crates.io/crates/peat-btle) |
 | `broker` | HTTP/WebSocket service broker (Axum) |
 | `kubernetes` | Kubernetes peer discovery via EndpointSlice API ([guide](docs/kubernetes.md)) |
-| `node` | All-in-one feature for the `eche-mesh-node` binary (includes broker, kubernetes, automerge-backend) |
+| `node` | All-in-one feature for the `peat-mesh-node` binary (includes broker, kubernetes, automerge-backend) |
 | `lite-bridge` | UDP bridge for Peat-Lite embedded devices (OTA, telemetry) |
 
 ```toml
 # Example with features
-eche-mesh = { version = "0.1.0", features = ["automerge-backend", "bluetooth"] }
+peat-mesh = { version = "0.1.0", features = ["automerge-backend", "bluetooth"] }
 ```
 
 ## Quick start
 
 ```rust
-use eche_mesh::{EcheMeshBuilder, MeshConfig};
+use peat_mesh::{PeatMeshBuilder, MeshConfig};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let mesh = EcheMeshBuilder::new()
+    let mesh = PeatMeshBuilder::new()
         .with_config(MeshConfig::default())
         .build()
         .await?;
@@ -58,19 +58,19 @@ async fn main() -> anyhow::Result<()> {
 
 ## Kubernetes Deployment
 
-eche-mesh includes a binary target (`eche-mesh-node`), Dockerfile, and Helm chart for Kubernetes deployment.
+peat-mesh includes a binary target (`peat-mesh-node`), Dockerfile, and Helm chart for Kubernetes deployment.
 
 ```bash
 # Build the binary
-cargo build --release --bin eche-mesh-node --features node
+cargo build --release --bin peat-mesh-node --features node
 
 # Build Docker image
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
 
 # Deploy to k3d (local Kubernetes)
-k3d cluster create eche-alpha
-k3d image import eche-mesh-node:latest -c eche-alpha
-helm install eche-mesh deploy/helm/eche-mesh \
+k3d cluster create peat-alpha
+k3d image import peat-mesh-node:latest -c peat-alpha
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$(openssl rand -base64 32)" \
   --set replicaCount=3
 ```
@@ -113,8 +113,8 @@ bash .goa
 
 ## Source
 
-- **GitHub**: [eche-mesh](https://github.com/defenseunicorns/eche-mesh)
-- **crates.io**: [eche-mesh](https://crates.io/crates/eche-mesh)
+- **GitHub**: [peat-mesh](https://github.com/defenseunicorns/peat-mesh)
+- **crates.io**: [peat-mesh](https://crates.io/crates/peat-mesh)
 
 ## License
 
@@ -122,10 +122,10 @@ Apache-2.0
 
 ## OTA Firmware Updates
 
-eche-mesh nodes can push firmware updates to Peat-Lite ESP32 devices over UDP:
+peat-mesh nodes can push firmware updates to Peat-Lite ESP32 devices over UDP:
 
 ```bash
-# Via HTTP API (when running as eche-mesh-node)
+# Via HTTP API (when running as peat-mesh-node)
 curl -X POST http://localhost:3000/api/v1/ota/<peer_id> \
   -F "firmware=@firmware.bin" -F "version=0.2.0"
 
@@ -133,4 +133,4 @@ curl -X POST http://localhost:3000/api/v1/ota/<peer_id> \
 curl http://localhost:3000/api/v1/ota/<peer_id>/status
 ```
 
-The OTA sender implements stop-and-wait reliable transfer with SHA256 verification and optional Ed25519 signing. See [ADR-047](https://github.com/defenseunicorns/eche-mesh/blob/main/docs/adr/047-firmware-ota-distribution.md) for protocol details.
+The OTA sender implements stop-and-wait reliable transfer with SHA256 verification and optional Ed25519 signing. See [ADR-047](https://github.com/defenseunicorns/peat-mesh/blob/main/docs/adr/047-firmware-ota-distribution.md) for protocol details.

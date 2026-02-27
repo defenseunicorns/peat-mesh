@@ -281,8 +281,8 @@ fn spawn_lateral_connection_retry(
 /// # Example
 ///
 /// ```ignore
-/// use eche_mesh::topology::{TopologyManager, TopologyBuilder};
-/// use eche_mesh::transport::MeshTransport;
+/// use peat_mesh::topology::{TopologyManager, TopologyBuilder};
+/// use peat_mesh::transport::MeshTransport;
 ///
 /// let builder = TopologyBuilder::new(...);
 /// let transport: Arc<dyn MeshTransport> = ...;

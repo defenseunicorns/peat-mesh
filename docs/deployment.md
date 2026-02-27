@@ -1,6 +1,6 @@
 # Deployment Guide
 
-This guide covers building, containerizing, and deploying eche-mesh nodes to Kubernetes clusters using k3d for local development and testing. For code-level API details, see [kubernetes.md](kubernetes.md). For architectural context, see [ADR-0001](adr/0001-kubernetes-istio-deployment.md).
+This guide covers building, containerizing, and deploying peat-mesh nodes to Kubernetes clusters using k3d for local development and testing. For code-level API details, see [kubernetes.md](kubernetes.md). For architectural context, see [ADR-0001](adr/0001-kubernetes-istio-deployment.md).
 
 ## Table of Contents
 
@@ -15,12 +15,12 @@ This guide covers building, containerizing, and deploying eche-mesh nodes to Kub
 
 ## Binary target
 
-The `eche-mesh-node` binary is a thin wrapper around the `EcheMesh` library that reads configuration from environment variables, sets up discovery, and serves the broker HTTP/WS API.
+The `peat-mesh-node` binary is a thin wrapper around the `PeatMesh` library that reads configuration from environment variables, sets up discovery, and serves the broker HTTP/WS API.
 
 ### Building
 
 ```bash
-cargo build --release --bin eche-mesh-node --features node
+cargo build --release --bin peat-mesh-node --features node
 ```
 
 The `node` meta-feature enables: `automerge-backend` + `broker` + `kubernetes` + `k8s-openapi/v1_32` + `tracing-subscriber`.
@@ -29,21 +29,21 @@ The `node` meta-feature enables: `automerge-backend` + `broker` + `kubernetes` +
 
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
-| `ECHE_FORMATION_SECRET` | Yes | — | Base64-encoded formation secret (shared by all nodes in a formation) |
-| `HOSTNAME` | No | `eche-mesh-0` | Pod name; used as deterministic keypair context (set automatically by K8s) |
-| `ECHE_DISCOVERY` | No | `kubernetes` | Discovery mode: `kubernetes` or `mdns` |
-| `ECHE_DATA_DIR` | No | `/data` | Persistent data directory (AutomergeStore uses `$ECHE_DATA_DIR/automerge/`) |
-| `ECHE_BROKER_PORT` | No | `8081` | HTTP/WS broker listen port |
-| `ECHE_IROH_BIND_PORT` | No | `11204` | Iroh QUIC (UDP) listen port |
-| `ECHE_IROH_RELAY_URLS` | No | — | Comma-separated Iroh relay URLs for NAT traversal |
-| `RUST_LOG` | No | `info,eche_mesh=debug` | Tracing filter |
+| `PEAT_FORMATION_SECRET` | Yes | — | Base64-encoded formation secret (shared by all nodes in a formation) |
+| `HOSTNAME` | No | `peat-mesh-0` | Pod name; used as deterministic keypair context (set automatically by K8s) |
+| `PEAT_DISCOVERY` | No | `kubernetes` | Discovery mode: `kubernetes` or `mdns` |
+| `PEAT_DATA_DIR` | No | `/data` | Persistent data directory (AutomergeStore uses `$PEAT_DATA_DIR/automerge/`) |
+| `PEAT_BROKER_PORT` | No | `8081` | HTTP/WS broker listen port |
+| `PEAT_IROH_BIND_PORT` | No | `11204` | Iroh QUIC (UDP) listen port |
+| `PEAT_IROH_RELAY_URLS` | No | — | Comma-separated Iroh relay URLs for NAT traversal |
+| `RUST_LOG` | No | `info,peat_mesh=debug` | Tracing filter |
 
 ### Running locally
 
 ```bash
-export ECHE_FORMATION_SECRET=$(openssl rand -base64 32)
-export ECHE_DISCOVERY=mdns
-./target/release/eche-mesh-node
+export PEAT_FORMATION_SECRET=$(openssl rand -base64 32)
+export PEAT_DISCOVERY=mdns
+./target/release/peat-mesh-node
 ```
 
 The binary logs structured output via `tracing-subscriber` and shuts down gracefully on SIGTERM or SIGINT.
@@ -52,7 +52,7 @@ The binary logs structured output via `tracing-subscriber` and shuts down gracef
 
 Each node derives a stable Ed25519 keypair from the formation secret and its hostname using HKDF-SHA256. This means:
 
-- Same `ECHE_FORMATION_SECRET` + same `HOSTNAME` = same `device_id` (survives pod restarts)
+- Same `PEAT_FORMATION_SECRET` + same `HOSTNAME` = same `device_id` (survives pod restarts)
 - Same secret + different hostname = different `device_id` (each pod gets a unique identity)
 - No persistent storage needed for identity
 
@@ -60,10 +60,10 @@ Each node derives a stable Ed25519 keypair from the formation secret and its hos
 
 ### Building
 
-From the eche-mesh repository root:
+From the peat-mesh repository root:
 
 ```bash
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
 ```
 
 The multi-stage build uses:
@@ -83,13 +83,13 @@ The runtime image is ~90MB (slim Debian base + statically-linked binary).
 
 ## Helm chart
 
-The Helm chart is in `deploy/helm/eche-mesh/`.
+The Helm chart is in `deploy/helm/peat-mesh/`.
 
 ### Resources created
 
 | Resource | Purpose |
 |----------|---------|
-| **StatefulSet** | Stable pod names (`eche-mesh-0`, `-1`, ...) for deterministic keypair derivation |
+| **StatefulSet** | Stable pod names (`peat-mesh-0`, `-1`, ...) for deterministic keypair derivation |
 | **Headless Service** (`clusterIP: None`) | Generates EndpointSlice resources that `KubernetesDiscovery` watches |
 | **ServiceAccount** | Pod identity for RBAC |
 | **Role** | `list` + `watch` on `endpointslices` in `discovery.k8s.io` |
@@ -99,7 +99,7 @@ The Helm chart is in `deploy/helm/eche-mesh/`.
 ### Key design decisions
 
 - **StatefulSet over Deployment**: Stable pod names (`HOSTNAME`) drive deterministic keypair derivation. No PVCs needed since identity is derived from seed + hostname.
-- **Headless Service**: Required so that Kubernetes creates `EndpointSlice` resources. `KubernetesDiscovery` watches these with label selector `app=eche-mesh`.
+- **Headless Service**: Required so that Kubernetes creates `EndpointSlice` resources. `KubernetesDiscovery` watches these with label selector `app=peat-mesh`.
 - **RBAC**: Minimal — only EndpointSlice read access for peer discovery.
 
 ### Configuration (values.yaml)
@@ -107,7 +107,7 @@ The Helm chart is in `deploy/helm/eche-mesh/`.
 ```yaml
 replicaCount: 3                    # Number of mesh nodes
 image:
-  repository: eche-mesh-node      # Docker image
+  repository: peat-mesh-node      # Docker image
   tag: latest
   pullPolicy: IfNotPresent
 formationSecret: ""                # Base64-encoded formation secret (required)
@@ -115,7 +115,7 @@ discoveryMode: kubernetes          # "kubernetes" or "mdns"
 brokerPort: 8081                   # Broker HTTP/WS port
 irohBindPort: 11204                # Iroh QUIC UDP port
 irohRelayUrls: ""                  # Comma-separated relay URLs
-rustLog: "info,eche_mesh=debug"    # Tracing filter
+rustLog: "info,peat_mesh=debug"    # Tracing filter
 resources:
   requests:
     cpu: 100m
@@ -129,7 +129,7 @@ resources:
 
 ```bash
 FORMATION_SECRET=$(openssl rand -base64 32)
-helm install eche-mesh deploy/helm/eche-mesh \
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$FORMATION_SECRET" \
   --set replicaCount=3
 ```
@@ -137,7 +137,7 @@ helm install eche-mesh deploy/helm/eche-mesh \
 ### Upgrading
 
 ```bash
-helm upgrade eche-mesh deploy/helm/eche-mesh \
+helm upgrade peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$FORMATION_SECRET" \
   --set replicaCount=5
 ```
@@ -145,7 +145,7 @@ helm upgrade eche-mesh deploy/helm/eche-mesh \
 ### Uninstalling
 
 ```bash
-helm uninstall eche-mesh
+helm uninstall peat-mesh
 ```
 
 ## Local cluster with k3d
@@ -171,7 +171,7 @@ mv /tmp/linux-amd64/helm ~/.local/bin/
 ### Creating a cluster
 
 ```bash
-k3d cluster create eche-alpha
+k3d cluster create peat-alpha
 ```
 
 ### Importing the Docker image
@@ -179,22 +179,22 @@ k3d cluster create eche-alpha
 k3d clusters can't pull from the local Docker daemon directly. Import the image:
 
 ```bash
-k3d image import eche-mesh-node:latest -c eche-alpha
+k3d image import peat-mesh-node:latest -c peat-alpha
 ```
 
 ### Full deploy workflow
 
 ```bash
 # Build
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
 
 # Create cluster and import image
-k3d cluster create eche-alpha
-k3d image import eche-mesh-node:latest -c eche-alpha
+k3d cluster create peat-alpha
+k3d image import peat-mesh-node:latest -c peat-alpha
 
 # Deploy
 FORMATION_SECRET=$(openssl rand -base64 32)
-helm install eche-mesh deploy/helm/eche-mesh \
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$FORMATION_SECRET" \
   --set replicaCount=3
 ```
@@ -204,30 +204,30 @@ helm install eche-mesh deploy/helm/eche-mesh \
 ### Pod status
 
 ```bash
-kubectl get pods -l app=eche-mesh
+kubectl get pods -l app=peat-mesh
 # NAME          READY   STATUS    RESTARTS   AGE
-# eche-mesh-0   1/1     Running   0          30s
-# eche-mesh-1   1/1     Running   0          25s
-# eche-mesh-2   1/1     Running   0          20s
+# peat-mesh-0   1/1     Running   0          30s
+# peat-mesh-1   1/1     Running   0          25s
+# peat-mesh-2   1/1     Running   0          20s
 ```
 
 ### Health and readiness
 
 ```bash
 # Health (liveness)
-kubectl exec eche-mesh-0 -- curl -s localhost:8081/api/v1/health
-# {"status":"healthy","node_id":"eche-mesh-0"}
+kubectl exec peat-mesh-0 -- curl -s localhost:8081/api/v1/health
+# {"status":"healthy","node_id":"peat-mesh-0"}
 
 # Readiness
-kubectl exec eche-mesh-0 -- curl -s localhost:8081/api/v1/ready
-# {"ready":true,"node_id":"eche-mesh-0","checks":[]}
+kubectl exec peat-mesh-0 -- curl -s localhost:8081/api/v1/ready
+# {"ready":true,"node_id":"peat-mesh-0","checks":[]}
 ```
 
 ### Node info
 
 ```bash
-kubectl exec eche-mesh-0 -- curl -s localhost:8081/api/v1/node
-# {"node_id":"eche-mesh-0","uptime_secs":120,"version":"0.1.0"}
+kubectl exec peat-mesh-0 -- curl -s localhost:8081/api/v1/node
+# {"node_id":"peat-mesh-0","uptime_secs":120,"version":"0.1.0"}
 ```
 
 ### Peer discovery and Iroh connections
@@ -235,18 +235,18 @@ kubectl exec eche-mesh-0 -- curl -s localhost:8081/api/v1/node
 Kubernetes EndpointSlice discovery feeds the `PeerConnector`, which registers each peer with Iroh's `StaticProvider`. Verify the Iroh-level connections and sync stack in the logs:
 
 ```bash
-kubectl logs eche-mesh-0 | grep "Peer connected to Iroh"
-# Peer connected to Iroh peer=eche-mesh-1 endpoint_id=0c48030ef6 addresses=[10.42.0.10:11204]
-# Peer connected to Iroh peer=eche-mesh-2 endpoint_id=e0ae6e4c6a addresses=[10.42.0.11:11204]
+kubectl logs peat-mesh-0 | grep "Peer connected to Iroh"
+# Peer connected to Iroh peer=peat-mesh-1 endpoint_id=0c48030ef6 addresses=[10.42.0.10:11204]
+# Peer connected to Iroh peer=peat-mesh-2 endpoint_id=e0ae6e4c6a addresses=[10.42.0.11:11204]
 ```
 
-The broker's `/api/v1/peers` endpoint reports mesh-level peers (EcheMesh topology). Iroh-level peer connections (used by the blob store and Automerge sync) are visible in the logs.
+The broker's `/api/v1/peers` endpoint reports mesh-level peers (PeatMesh topology). Iroh-level peer connections (used by the blob store and Automerge sync) are visible in the logs.
 
 ### Automerge sync stack
 
 The node starts the full Automerge sync pipeline:
 
-1. **AutomergeStore** opens a redb database at `$ECHE_DATA_DIR/automerge/`
+1. **AutomergeStore** opens a redb database at `$PEAT_DATA_DIR/automerge/`
 2. **MeshSyncTransport** shares the Iroh endpoint with the blob store
 3. **AutomergeSyncCoordinator** + **SyncChannelManager** handle delta sync
 4. **SyncProtocolHandler** accepts incoming sync connections on `cap/automerge/1` ALPN
@@ -255,7 +255,7 @@ The node starts the full Automerge sync pipeline:
 Verify the sync stack initialized:
 
 ```bash
-kubectl logs eche-mesh-0 | grep -E "automerge|blob store ready"
+kubectl logs peat-mesh-0 | grep -E "automerge|blob store ready"
 # Opening redb database with cache_size=16777216 bytes
 # Iroh blob store ready (blobs + automerge sync) iroh_endpoint_id=c25a10ed6e
 ```
@@ -263,9 +263,9 @@ kubectl logs eche-mesh-0 | grep -E "automerge|blob store ready"
 ### EndpointSlice
 
 ```bash
-kubectl get endpointslice -l app=eche-mesh
+kubectl get endpointslice -l app=peat-mesh
 # NAME              ADDRESSTYPE   PORTS        ENDPOINTS                         AGE
-# eche-mesh-xxxxx   IPv4          11204,8081   10.42.0.9,10.42.0.10,10.42.0.11  30s
+# peat-mesh-xxxxx   IPv4          11204,8081   10.42.0.9,10.42.0.10,10.42.0.11  30s
 ```
 
 ### Deterministic keypair verification
@@ -274,28 +274,28 @@ Delete a pod and verify the device_id is identical after restart:
 
 ```bash
 # Before
-kubectl logs eche-mesh-0 | grep "Mesh started"
-# Mesh started node_id=eche-mesh-0 device_id=df0036ca6cfb08b2cc03214a1bdb4f24
+kubectl logs peat-mesh-0 | grep "Mesh started"
+# Mesh started node_id=peat-mesh-0 device_id=df0036ca6cfb08b2cc03214a1bdb4f24
 
-kubectl delete pod eche-mesh-0
-kubectl wait --for=condition=ready pod/eche-mesh-0 --timeout=30s
+kubectl delete pod peat-mesh-0
+kubectl wait --for=condition=ready pod/peat-mesh-0 --timeout=30s
 
 # After — same device_id
-kubectl logs eche-mesh-0 | grep "Mesh started"
-# Mesh started node_id=eche-mesh-0 device_id=df0036ca6cfb08b2cc03214a1bdb4f24
+kubectl logs peat-mesh-0 | grep "Mesh started"
+# Mesh started node_id=peat-mesh-0 device_id=df0036ca6cfb08b2cc03214a1bdb4f24
 ```
 
 ### Logs
 
 ```bash
 # Single pod
-kubectl logs eche-mesh-0
+kubectl logs peat-mesh-0
 
 # All pods
-kubectl logs -l app=eche-mesh
+kubectl logs -l app=peat-mesh
 
 # Follow
-kubectl logs -f eche-mesh-0
+kubectl logs -f peat-mesh-0
 ```
 
 ## Cluster lifecycle
@@ -305,7 +305,7 @@ k3d clusters can be stopped and started without losing state. This is useful for
 ### Stopping a cluster (preserves state)
 
 ```bash
-k3d cluster stop eche-alpha
+k3d cluster stop peat-alpha
 ```
 
 This stops the Docker containers but preserves all Kubernetes state (pods, services, secrets, etc.). The cluster uses no resources while stopped.
@@ -313,7 +313,7 @@ This stops the Docker containers but preserves all Kubernetes state (pods, servi
 ### Starting a stopped cluster
 
 ```bash
-k3d cluster start eche-alpha
+k3d cluster start peat-alpha
 ```
 
 All pods, services, and Helm releases resume exactly where they left off. Pod identities (device_id) remain stable since they're derived from the same formation secret + hostname.
@@ -323,29 +323,29 @@ All pods, services, and Helm releases resume exactly where they left off. Pod id
 ```bash
 k3d cluster list
 # NAME         SERVERS   AGENTS   LOADBALANCER
-# eche-alpha   1/1       0/0      true
+# peat-alpha   1/1       0/0      true
 ```
 
 ### Deleting a cluster (destroys state)
 
 ```bash
-k3d cluster delete eche-alpha
+k3d cluster delete peat-alpha
 ```
 
 ### Rebuilding after code changes
 
-After modifying eche-mesh source code:
+After modifying peat-mesh source code:
 
 ```bash
 # Rebuild image
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
 
 # Re-import into running cluster
-k3d image import eche-mesh-node:latest -c eche-alpha
+k3d image import peat-mesh-node:latest -c peat-alpha
 
 # Rolling restart to pick up new image
-kubectl rollout restart statefulset eche-mesh
-kubectl rollout status statefulset eche-mesh
+kubectl rollout restart statefulset peat-mesh
+kubectl rollout status statefulset peat-mesh
 ```
 
 ## Two-cluster federation
@@ -356,65 +356,65 @@ Two k3d clusters on a shared Docker network can test cross-cluster communication
 
 ```bash
 # Create shared Docker network
-docker network create eche-federation
+docker network create peat-federation
 
 # Create two clusters on the shared network
-k3d cluster create eche-alpha --network eche-federation
-k3d cluster create eche-bravo --network eche-federation
+k3d cluster create peat-alpha --network peat-federation
+k3d cluster create peat-bravo --network peat-federation
 
 # Build and import image to both
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
-k3d image import eche-mesh-node:latest -c eche-alpha
-k3d image import eche-mesh-node:latest -c eche-bravo
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
+k3d image import peat-mesh-node:latest -c peat-alpha
+k3d image import peat-mesh-node:latest -c peat-bravo
 
 # Deploy with the SAME formation secret to both clusters
 FORMATION_SECRET=$(openssl rand -base64 32)
 
-kubectl config use-context k3d-eche-alpha
-helm install eche-mesh deploy/helm/eche-mesh \
+kubectl config use-context k3d-peat-alpha
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$FORMATION_SECRET" \
   --set replicaCount=2
 
-kubectl config use-context k3d-eche-bravo
-helm install eche-mesh deploy/helm/eche-mesh \
+kubectl config use-context k3d-peat-bravo
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$FORMATION_SECRET" \
   --set replicaCount=2
 ```
 
 ### Cross-cluster connectivity
 
-Both k3d clusters share the `eche-federation` Docker network, meaning their k3d server node containers can reach each other. To enable cross-cluster mesh traffic:
+Both k3d clusters share the `peat-federation` Docker network, meaning their k3d server node containers can reach each other. To enable cross-cluster mesh traffic:
 
 1. **Expose Iroh QUIC via NodePort** in each cluster so pods in one cluster can reach pods in another via the k3d server container IP + NodePort.
 
-2. **Configure gateway pods** with `ECHE_STATIC_PEERS` pointing to remote cluster gateway addresses. Gateway pods use `HybridDiscovery` combining `KubernetesDiscovery` (local) + `StaticDiscovery` (remote).
+2. **Configure gateway pods** with `PEAT_STATIC_PEERS` pointing to remote cluster gateway addresses. Gateway pods use `HybridDiscovery` combining `KubernetesDiscovery` (local) + `StaticDiscovery` (remote).
 
 3. **Find k3d server IPs** on the shared network:
    ```bash
-   docker inspect k3d-eche-alpha-server-0 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
-   docker inspect k3d-eche-bravo-server-0 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+   docker inspect k3d-peat-alpha-server-0 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
+   docker inspect k3d-peat-bravo-server-0 --format '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}'
    ```
 
 ### Stopping and resuming federation clusters
 
 ```bash
 # Stop both (preserves state, uses no resources)
-k3d cluster stop eche-alpha
-k3d cluster stop eche-bravo
+k3d cluster stop peat-alpha
+k3d cluster stop peat-bravo
 
 # Resume later
-k3d cluster start eche-alpha
-k3d cluster start eche-bravo
+k3d cluster start peat-alpha
+k3d cluster start peat-bravo
 ```
 
-The `eche-federation` Docker network persists independently of the clusters.
+The `peat-federation` Docker network persists independently of the clusters.
 
 ### Cleanup
 
 ```bash
-k3d cluster delete eche-alpha
-k3d cluster delete eche-bravo
-docker network rm eche-federation
+k3d cluster delete peat-alpha
+k3d cluster delete peat-bravo
+docker network rm peat-federation
 ```
 
 ## Functional testing
@@ -427,7 +427,7 @@ k3d clusters are well-suited for automated functional tests. The clusters can be
 #!/bin/bash
 set -euo pipefail
 
-CLUSTER="eche-test-$$"
+CLUSTER="peat-test-$$"
 SECRET=$(openssl rand -base64 32)
 
 cleanup() { k3d cluster delete "$CLUSTER" 2>/dev/null || true; }
@@ -435,56 +435,56 @@ trap cleanup EXIT
 
 # Setup
 k3d cluster create "$CLUSTER" --no-lb
-docker build -t eche-mesh-node:latest -f deploy/Dockerfile .
-k3d image import eche-mesh-node:latest -c "$CLUSTER"
-helm install eche-mesh deploy/helm/eche-mesh \
+docker build -t peat-mesh-node:latest -f deploy/Dockerfile .
+k3d image import peat-mesh-node:latest -c "$CLUSTER"
+helm install peat-mesh deploy/helm/peat-mesh \
   --set "formationSecret=$SECRET" --set replicaCount=3 \
   --set image.pullPolicy=Never \
   --kube-context "k3d-$CLUSTER"
 
 # Wait for pods
-kubectl --context "k3d-$CLUSTER" rollout status statefulset/eche-mesh --timeout=120s
+kubectl --context "k3d-$CLUSTER" rollout status statefulset/peat-mesh --timeout=120s
 
 # Verify health
 for i in 0 1 2; do
-  STATUS=$(kubectl --context "k3d-$CLUSTER" exec "eche-mesh-$i" -- \
+  STATUS=$(kubectl --context "k3d-$CLUSTER" exec "peat-mesh-$i" -- \
     curl -sf localhost:8081/api/v1/health | jq -r .status)
-  [ "$STATUS" = "healthy" ] || { echo "FAIL: eche-mesh-$i unhealthy"; exit 1; }
+  [ "$STATUS" = "healthy" ] || { echo "FAIL: peat-mesh-$i unhealthy"; exit 1; }
 done
 echo "OK: All pods healthy"
 
 # Verify peer discovery + Iroh connections
 sleep 35  # K8s discovery polls every 30s
 for i in 0 1 2; do
-  PEERS=$(kubectl --context "k3d-$CLUSTER" logs "eche-mesh-$i" | \
+  PEERS=$(kubectl --context "k3d-$CLUSTER" logs "peat-mesh-$i" | \
     grep -c "Peer connected to Iroh" || true)
-  [ "$PEERS" -ge 2 ] || { echo "FAIL: eche-mesh-$i has $PEERS Iroh peers (expected 2)"; exit 1; }
+  [ "$PEERS" -ge 2 ] || { echo "FAIL: peat-mesh-$i has $PEERS Iroh peers (expected 2)"; exit 1; }
 done
 echo "OK: All pods discovered peers via Iroh"
 
 # Verify Automerge sync stack initialized
 for i in 0 1 2; do
-  kubectl --context "k3d-$CLUSTER" logs "eche-mesh-$i" | \
-    grep -q "blobs + automerge sync" || { echo "FAIL: eche-mesh-$i sync stack not initialized"; exit 1; }
+  kubectl --context "k3d-$CLUSTER" logs "peat-mesh-$i" | \
+    grep -q "blobs + automerge sync" || { echo "FAIL: peat-mesh-$i sync stack not initialized"; exit 1; }
 done
 echo "OK: Automerge sync stack active on all pods"
 
 # Verify deterministic identity survives restart
-BEFORE=$(kubectl --context "k3d-$CLUSTER" logs eche-mesh-0 | \
+BEFORE=$(kubectl --context "k3d-$CLUSTER" logs peat-mesh-0 | \
   grep "Mesh started" | grep -oP 'device_id=\S+')
-kubectl --context "k3d-$CLUSTER" delete pod eche-mesh-0
+kubectl --context "k3d-$CLUSTER" delete pod peat-mesh-0
 kubectl --context "k3d-$CLUSTER" wait --for=condition=ready \
-  pod/eche-mesh-0 --timeout=30s
-AFTER=$(kubectl --context "k3d-$CLUSTER" logs eche-mesh-0 | \
+  pod/peat-mesh-0 --timeout=30s
+AFTER=$(kubectl --context "k3d-$CLUSTER" logs peat-mesh-0 | \
   grep "Mesh started" | grep -oP 'device_id=\S+')
 [ "$BEFORE" = "$AFTER" ] || { echo "FAIL: device_id changed after restart"; exit 1; }
 echo "OK: Deterministic identity stable across restart"
 
 # Verify no errors in logs
 for i in 0 1 2; do
-  ERRORS=$(kubectl --context "k3d-$CLUSTER" logs "eche-mesh-$i" | \
+  ERRORS=$(kubectl --context "k3d-$CLUSTER" logs "peat-mesh-$i" | \
     grep -ci "error" || true)
-  [ "$ERRORS" -eq 0 ] || echo "WARN: eche-mesh-$i has $ERRORS error lines"
+  [ "$ERRORS" -eq 0 ] || echo "WARN: peat-mesh-$i has $ERRORS error lines"
 done
 
 echo "PASS: All functional checks passed"
@@ -500,9 +500,9 @@ To test execution from one cluster to another:
 
 ```bash
 # Create clusters with port mapping for broker access
-k3d cluster create eche-alpha --network eche-federation \
+k3d cluster create peat-alpha --network peat-federation \
   -p "8081:8081@server:0"
-k3d cluster create eche-bravo --network eche-federation \
+k3d cluster create peat-bravo --network peat-federation \
   -p "8082:8081@server:0"
 
 # After deploy, test from host:

@@ -17,7 +17,7 @@ use std::fmt;
 /// # Example
 ///
 /// ```ignore
-/// use eche_mesh::security::{DeviceKeypair, DeviceId};
+/// use peat_mesh::security::{DeviceKeypair, DeviceId};
 ///
 /// let keypair = DeviceKeypair::generate();
 /// let device_id = keypair.device_id();

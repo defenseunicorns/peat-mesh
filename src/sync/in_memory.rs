@@ -11,9 +11,9 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::sync::in_memory::InMemoryBackend;
-//! use eche_mesh::sync::types::{Document, Query};
-//! use eche_mesh::sync::traits::DocumentStore;
+//! use peat_mesh::sync::in_memory::InMemoryBackend;
+//! use peat_mesh::sync::types::{Document, Query};
+//! use peat_mesh::sync::traits::DocumentStore;
 //! use std::collections::HashMap;
 //!
 //! let backend = InMemoryBackend::new_initialized();

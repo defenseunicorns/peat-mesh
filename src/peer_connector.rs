@@ -170,8 +170,8 @@ mod tests {
             SecretKey::from_bytes(&okm).public()
         };
 
-        let id1 = derive(&secret, "eche-mesh-0");
-        let id2 = derive(&store_secret, "eche-mesh-0");
+        let id1 = derive(&secret, "peat-mesh-0");
+        let id2 = derive(&store_secret, "peat-mesh-0");
         assert_eq!(
             id1, id2,
             "Same secret + hostname must produce same EndpointId"
@@ -191,8 +191,8 @@ mod tests {
             SecretKey::from_bytes(&okm).public()
         };
 
-        let id_a = derive("eche-mesh-0");
-        let id_b = derive("eche-mesh-1");
+        let id_a = derive("peat-mesh-0");
+        let id_b = derive("peat-mesh-1");
         assert_ne!(
             id_a, id_b,
             "Different hostnames must produce different EndpointIds"
@@ -210,8 +210,8 @@ mod tests {
             SecretKey::from_bytes(&okm).public()
         };
 
-        let id_a = derive(b"secret-one", "eche-mesh-0");
-        let id_b = derive(b"secret-two", "eche-mesh-0");
+        let id_a = derive(b"secret-one", "peat-mesh-0");
+        let id_b = derive(b"secret-two", "peat-mesh-0");
         assert_ne!(
             id_a, id_b,
             "Different secrets must produce different EndpointIds"

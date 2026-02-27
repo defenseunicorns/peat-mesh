@@ -1,22 +1,22 @@
 //! Bluetooth LE Transport Adapter
 //!
-//! This module provides integration between eche-btle and eche-mesh's
-//! transport abstraction. It wraps `eche_btle::BluetoothLETransport` and
+//! This module provides integration between peat-btle and peat-mesh's
+//! transport abstraction. It wraps `peat_btle::BluetoothLETransport` and
 //! implements the `MeshTransport` and `Transport` traits from ADR-032.
 //!
 //! ## Architecture
 //!
 //! ```text
 //! ┌─────────────────────────────────────────────────────────────┐
-//! │                   eche-mesh                                  │
+//! │                   peat-mesh                                  │
 //! │  ┌─────────────────────────────────────────────────────────┐ │
-//! │  │          EcheBleTransport (this module)                 │ │
+//! │  │          PeatBleTransport (this module)                 │ │
 //! │  │   Implements: MeshTransport, Transport                  │ │
 //! │  └───────────────────────┬─────────────────────────────────┘ │
 //! │                          │ wraps                             │
 //! │  ┌───────────────────────▼─────────────────────────────────┐ │
-//! │  │       eche_btle::BluetoothLETransport<A>                │ │
-//! │  │   Implements: eche_btle::MeshTransport                  │ │
+//! │  │       peat_btle::BluetoothLETransport<A>                │ │
+//! │  │   Implements: peat_btle::MeshTransport                  │ │
 //! │  └─────────────────────────────────────────────────────────┘ │
 //! └─────────────────────────────────────────────────────────────┘
 //! ```
@@ -24,24 +24,24 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use eche_mesh::transport::btle::EcheBleTransport;
-//! use eche_btle::{BleConfig, BluetoothLETransport, platform::StubAdapter};
+//! use peat_mesh::transport::btle::PeatBleTransport;
+//! use peat_btle::{BleConfig, BluetoothLETransport, platform::StubAdapter};
 //!
-//! // Create eche-btle transport
+//! // Create peat-btle transport
 //! let config = BleConfig::default();
 //! let adapter = StubAdapter::default();
 //! let btle = BluetoothLETransport::new(config, adapter);
 //!
-//! // Wrap in adapter for eche-mesh
-//! let transport = EcheBleTransport::new(btle);
+//! // Wrap in adapter for peat-mesh
+//! let transport = PeatBleTransport::new(btle);
 //!
 //! // Register with TransportManager
 //! manager.register(Arc::new(transport));
 //! ```
 
 use async_trait::async_trait;
-use eche_btle::platform::BleAdapter;
-use eche_btle::{BluetoothLETransport, MeshTransport as BtleMeshTransport};
+use peat_btle::platform::BleAdapter;
+use peat_btle::{BluetoothLETransport, MeshTransport as BtleMeshTransport};
 use std::collections::HashSet;
 use std::sync::RwLock;
 use std::time::Instant;
@@ -57,28 +57,28 @@ use super::{
 // NodeId Conversion
 // =============================================================================
 
-/// Convert eche-btle NodeId (u32) to eche-mesh NodeId (String)
-fn btle_to_eche_node_id(btle_id: &eche_btle::NodeId) -> NodeId {
+/// Convert peat-btle NodeId (u32) to peat-mesh NodeId (String)
+fn btle_to_peat_node_id(btle_id: &peat_btle::NodeId) -> NodeId {
     NodeId::new(format!("{:08X}", btle_id.as_u32()))
 }
 
-/// Convert eche-mesh NodeId (String) to eche-btle NodeId (u32)
-fn eche_to_btle_node_id(eche_id: &NodeId) -> Option<eche_btle::NodeId> {
-    let s = eche_id
+/// Convert peat-mesh NodeId (String) to peat-btle NodeId (u32)
+fn peat_to_btle_node_id(peat_id: &NodeId) -> Option<peat_btle::NodeId> {
+    let s = peat_id
         .as_str()
         .trim_start_matches("0x")
         .trim_start_matches("0X");
-    u32::from_str_radix(s, 16).ok().map(eche_btle::NodeId::new)
+    u32::from_str_radix(s, 16).ok().map(peat_btle::NodeId::new)
 }
 
 // =============================================================================
 // Connection Adapter
 // =============================================================================
 
-/// Adapter for eche-btle connections
+/// Adapter for peat-btle connections
 struct BleConnectionAdapter {
-    /// Original connection from eche-btle
-    inner: Box<dyn eche_btle::BleConnection>,
+    /// Original connection from peat-btle
+    inner: Box<dyn peat_btle::BleConnection>,
     /// Converted node ID
     peer_id: NodeId,
     /// When the connection was established
@@ -111,12 +111,12 @@ impl MeshConnection for BleConnectionAdapter {
 // Transport Adapter
 // =============================================================================
 
-/// Bluetooth LE transport adapter for eche-mesh
+/// Bluetooth LE transport adapter for peat-mesh
 ///
-/// Wraps `eche_btle::BluetoothLETransport` and implements the transport
+/// Wraps `peat_btle::BluetoothLETransport` and implements the transport
 /// abstraction from ADR-032.
-pub struct EcheBleTransport<A: BleAdapter> {
-    /// Wrapped eche-btle transport
+pub struct PeatBleTransport<A: BleAdapter> {
+    /// Wrapped peat-btle transport
     inner: BluetoothLETransport<A>,
     /// Converted capabilities
     capabilities: TransportCapabilities,
@@ -128,7 +128,7 @@ pub struct EcheBleTransport<A: BleAdapter> {
     started: RwLock<Option<Instant>>,
 }
 
-impl<A: BleAdapter + Send + Sync + 'static> EcheBleTransport<A> {
+impl<A: BleAdapter + Send + Sync + 'static> PeatBleTransport<A> {
     /// Create a new BLE transport adapter
     pub fn new(inner: BluetoothLETransport<A>) -> Self {
         let btle_caps = inner.capabilities();
@@ -143,8 +143,8 @@ impl<A: BleAdapter + Send + Sync + 'static> EcheBleTransport<A> {
         }
     }
 
-    /// Convert eche-btle capabilities to eche-mesh capabilities
-    fn convert_capabilities(btle: &eche_btle::TransportCapabilities) -> TransportCapabilities {
+    /// Convert peat-btle capabilities to peat-mesh capabilities
+    fn convert_capabilities(btle: &peat_btle::TransportCapabilities) -> TransportCapabilities {
         TransportCapabilities {
             transport_type: TransportType::BluetoothLE,
             max_bandwidth_bps: btle.max_bandwidth_bps,
@@ -177,7 +177,7 @@ impl<A: BleAdapter + Send + Sync + 'static> EcheBleTransport<A> {
         }
     }
 
-    /// Get the underlying eche-btle transport
+    /// Get the underlying peat-btle transport
     pub fn inner(&self) -> &BluetoothLETransport<A> {
         &self.inner
     }
@@ -189,12 +189,12 @@ impl<A: BleAdapter + Send + Sync + 'static> EcheBleTransport<A> {
 
     /// Get the node ID of this transport
     pub fn node_id(&self) -> NodeId {
-        btle_to_eche_node_id(self.inner.node_id())
+        btle_to_peat_node_id(self.inner.node_id())
     }
 }
 
 #[async_trait]
-impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A> {
+impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for PeatBleTransport<A> {
     async fn start(&self) -> Result<()> {
         self.inner
             .start()
@@ -214,7 +214,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A
     }
 
     async fn connect(&self, peer_id: &NodeId) -> Result<Box<dyn MeshConnection>> {
-        let btle_peer_id = eche_to_btle_node_id(peer_id).ok_or_else(|| {
+        let btle_peer_id = peat_to_btle_node_id(peer_id).ok_or_else(|| {
             TransportError::PeerNotFound(format!("Invalid NodeId format: {}", peer_id))
         })?;
 
@@ -240,7 +240,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A
     }
 
     async fn disconnect(&self, peer_id: &NodeId) -> Result<()> {
-        let btle_peer_id = eche_to_btle_node_id(peer_id).ok_or_else(|| {
+        let btle_peer_id = peat_to_btle_node_id(peer_id).ok_or_else(|| {
             TransportError::PeerNotFound(format!("Invalid NodeId format: {}", peer_id))
         })?;
 
@@ -267,7 +267,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A
     }
 
     fn get_connection(&self, peer_id: &NodeId) -> Option<Box<dyn MeshConnection>> {
-        let btle_peer_id = eche_to_btle_node_id(peer_id)?;
+        let btle_peer_id = peat_to_btle_node_id(peer_id)?;
         let conn = self.inner.get_connection(&btle_peer_id)?;
 
         Some(Box::new(BleConnectionAdapter {
@@ -285,12 +285,12 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A
         self.inner
             .connected_peers()
             .iter()
-            .map(btle_to_eche_node_id)
+            .map(btle_to_peat_node_id)
             .collect()
     }
 
     async fn send_to(&self, peer_id: &NodeId, data: &[u8]) -> Result<usize> {
-        let btle_peer_id = eche_to_btle_node_id(peer_id).ok_or_else(|| {
+        let btle_peer_id = peat_to_btle_node_id(peer_id).ok_or_else(|| {
             TransportError::PeerNotFound(format!("Invalid NodeId format: {}", peer_id))
         })?;
 
@@ -325,7 +325,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for EcheBleTransport<A
     }
 }
 
-impl<A: BleAdapter + Send + Sync + 'static> Transport for EcheBleTransport<A> {
+impl<A: BleAdapter + Send + Sync + 'static> Transport for PeatBleTransport<A> {
     fn capabilities(&self) -> &TransportCapabilities {
         &self.capabilities
     }
@@ -352,44 +352,44 @@ impl<A: BleAdapter + Send + Sync + 'static> Transport for EcheBleTransport<A> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use eche_btle::platform::StubAdapter;
-    use eche_btle::BleConfig;
+    use peat_btle::platform::StubAdapter;
+    use peat_btle::BleConfig;
 
-    fn create_test_transport() -> EcheBleTransport<StubAdapter> {
+    fn create_test_transport() -> PeatBleTransport<StubAdapter> {
         let config = BleConfig::default();
         let adapter = StubAdapter::default();
         let btle = BluetoothLETransport::new(config, adapter);
-        EcheBleTransport::new(btle)
+        PeatBleTransport::new(btle)
     }
 
     #[test]
     fn test_node_id_conversion_roundtrip() {
-        let btle_id = eche_btle::NodeId::new(0x12345678);
-        let eche_id = btle_to_eche_node_id(&btle_id);
-        assert_eq!(eche_id.as_str(), "12345678");
+        let btle_id = peat_btle::NodeId::new(0x12345678);
+        let peat_id = btle_to_peat_node_id(&btle_id);
+        assert_eq!(peat_id.as_str(), "12345678");
 
-        let back = eche_to_btle_node_id(&eche_id).unwrap();
+        let back = peat_to_btle_node_id(&peat_id).unwrap();
         assert_eq!(back.as_u32(), 0x12345678);
     }
 
     #[test]
     fn test_node_id_conversion_with_prefix() {
-        let eche_id = NodeId::new("0x12345678".to_string());
-        let btle_id = eche_to_btle_node_id(&eche_id).unwrap();
+        let peat_id = NodeId::new("0x12345678".to_string());
+        let btle_id = peat_to_btle_node_id(&peat_id).unwrap();
         assert_eq!(btle_id.as_u32(), 0x12345678);
     }
 
     #[test]
     fn test_node_id_conversion_lowercase() {
-        let eche_id = NodeId::new("abcdef12".to_string());
-        let btle_id = eche_to_btle_node_id(&eche_id).unwrap();
+        let peat_id = NodeId::new("abcdef12".to_string());
+        let btle_id = peat_to_btle_node_id(&peat_id).unwrap();
         assert_eq!(btle_id.as_u32(), 0xABCDEF12);
     }
 
     #[test]
     fn test_node_id_conversion_invalid() {
-        let eche_id = NodeId::new("not_hex".to_string());
-        assert!(eche_to_btle_node_id(&eche_id).is_none());
+        let peat_id = NodeId::new("not_hex".to_string());
+        assert!(peat_to_btle_node_id(&peat_id).is_none());
     }
 
     #[test]
@@ -461,10 +461,10 @@ mod tests {
 
     #[test]
     fn test_node_id() {
-        let config = eche_btle::BleConfig::default();
+        let config = peat_btle::BleConfig::default();
         let adapter = StubAdapter::default();
         let btle = BluetoothLETransport::new(config.clone(), adapter);
-        let transport = EcheBleTransport::new(btle);
+        let transport = PeatBleTransport::new(btle);
 
         let node_id = transport.node_id();
         let expected = format!("{:08X}", config.node_id.as_u32());

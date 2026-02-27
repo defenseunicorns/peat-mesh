@@ -1,4 +1,4 @@
-//! Transport and protocol handler for eche-mesh-node Automerge sync.
+//! Transport and protocol handler for peat-mesh-node Automerge sync.
 //!
 //! Provides two main types:
 //!
@@ -25,7 +25,7 @@ use super::sync_transport::SyncTransport;
 // MeshSyncTransport
 // ────────────────────────────────────────────────────────────────────────────
 
-/// Lightweight transport for eche-mesh-node that tracks QUIC connections
+/// Lightweight transport for peat-mesh-node that tracks QUIC connections
 /// to peers and hands them to the sync coordinator on demand.
 pub struct MeshSyncTransport {
     endpoint: Endpoint,

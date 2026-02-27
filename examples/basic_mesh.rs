@@ -1,10 +1,10 @@
-//! Basic mesh setup — the "hello world" of eche-mesh.
+//! Basic mesh setup — the "hello world" of peat-mesh.
 //!
 //! Run with: `cargo run --example basic_mesh`
 
-use eche_mesh::{
+use peat_mesh::{
     security::{DeviceKeypair, FormationKey},
-    EcheMesh, EcheMeshBuilder, EcheMeshEvent, MeshConfig, MeshDiscoveryConfig,
+    MeshConfig, MeshDiscoveryConfig, PeatMesh, PeatMeshBuilder, PeatMeshEvent,
 };
 use std::time::Duration;
 
@@ -14,7 +14,7 @@ fn main() {
         node_id: Some("example-node-1".into()),
         discovery: MeshDiscoveryConfig {
             mdns_enabled: true,
-            service_name: "eche-example".into(),
+            service_name: "peat-example".into(),
             interval: Duration::from_secs(15),
         },
         ..Default::default()
@@ -30,7 +30,7 @@ fn main() {
     println!("Formation: {}", formation_key.formation_id());
 
     // 3. Build the mesh.
-    let mesh: EcheMesh = EcheMeshBuilder::new(config)
+    let mesh: PeatMesh = PeatMeshBuilder::new(config)
         .with_device_keypair(device_keypair)
         .with_formation_key(formation_key)
         .build();
@@ -54,16 +54,16 @@ fn main() {
             loop {
                 match events.recv().await {
                     Ok(event) => match event {
-                        EcheMeshEvent::StateChanged(state) => {
+                        PeatMeshEvent::StateChanged(state) => {
                             println!("Event: state changed to {:?}", state);
                         }
-                        EcheMeshEvent::PeerJoined(peer) => {
+                        PeatMeshEvent::PeerJoined(peer) => {
                             println!("Event: peer joined — {}", peer.as_str());
                         }
-                        EcheMeshEvent::PeerLeft(peer) => {
+                        PeatMeshEvent::PeerLeft(peer) => {
                             println!("Event: peer left — {}", peer.as_str());
                         }
-                        EcheMeshEvent::TopologyChanged(topo) => {
+                        PeatMeshEvent::TopologyChanged(topo) => {
                             println!("Event: topology changed — {:?}", topo);
                         }
                     },

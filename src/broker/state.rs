@@ -71,7 +71,7 @@ pub enum MeshEvent {
 ///
 /// Consumers implement this trait to provide live mesh state to the HTTP/WS broker.
 /// The broker holds `Arc<dyn MeshBrokerState>` (same pattern as `Arc<dyn DataStore>`
-/// in eche-persistence).
+/// in peat-persistence).
 #[async_trait::async_trait]
 pub trait MeshBrokerState: Send + Sync + 'static {
     /// Returns information about the local node.

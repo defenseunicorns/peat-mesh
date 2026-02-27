@@ -1,6 +1,6 @@
 //! Storage backend trait abstraction
 //!
-//! This module defines the core traits for Eche mesh's storage layer,
+//! This module defines the core traits for Peat mesh's storage layer,
 //! enabling runtime backend selection between Ditto, Automerge, RocksDB, etc.
 //!
 //! # Design Philosophy
@@ -13,7 +13,7 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_protocol::storage::{StorageBackend, create_storage_backend};
+//! use peat_protocol::storage::{StorageBackend, create_storage_backend};
 //!
 //! // Create backend from configuration
 //! let config = StorageConfig::from_env()?;

@@ -1,6 +1,6 @@
 # ADR-0004: Pluggable Transport Abstraction for Multi-Network Operations
 
-> **Provenance**: Transferred from eche repo ADR-032. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-032. Renumbered for peat-mesh.
 
 **Status**: Proposed
 **Date**: 2025-12-07
@@ -53,7 +53,7 @@ How multiple transports are used together:
 ### Current Implementation Gap
 
 **What exists today:**
-- `MeshTransport` trait in `eche-protocol/src/transport/mod.rs`
+- `MeshTransport` trait in `peat-protocol/src/transport/mod.rs`
 - `IrohMeshTransport` implementing QUIC-based transport
 - `DittoMeshTransport` delegating to Ditto's transport
 - `HealthMonitor` for connection quality tracking
@@ -71,7 +71,7 @@ How multiple transports are used together:
 **ADR-030** answered: "Does Iroh support multiple NICs?"
 - Yes, Iroh automatically binds to all interfaces
 
-**ADR-032** answers: "How does Eche manage multiple transports holistically?"
+**ADR-032** answers: "How does Peat manage multiple transports holistically?"
 - Transport registration with unique IDs
 - PACE-style failover policies
 - Simultaneous use modes
@@ -696,7 +696,7 @@ impl BluetoothLETransport {
             },
             adapter,
             connections: RwLock::new(HashMap::new()),
-            service_uuid: Uuid::parse_str("ECHE-SERVICE-UUID").unwrap(),
+            service_uuid: Uuid::parse_str("PEAT-SERVICE-UUID").unwrap(),
         }
     }
 }
@@ -1051,7 +1051,7 @@ This integrates with the geographic beacon system (ADR-024) to provide distance 
 
 **Goal**: Android/iOS peer discovery and messaging
 
-- [ ] Create `eche-bluetooth` crate (behind feature flag)
+- [ ] Create `peat-bluetooth` crate (behind feature flag)
 - [ ] Implement `BluetoothLETransport`
 - [ ] Implement BLE advertising for peer discovery
 - [ ] Implement GATT service for data exchange
@@ -1064,7 +1064,7 @@ This integrates with the geographic beacon system (ADR-024) to provide distance 
 
 **Goal**: Long-range, low-power telemetry
 
-- [ ] Create `eche-lora` crate (behind feature flag)
+- [ ] Create `peat-lora` crate (behind feature flag)
 - [ ] Implement `LoRaTransport`
 - [ ] Handle spreading factor selection
 - [ ] Implement duty cycle management
@@ -1077,7 +1077,7 @@ This integrates with the geographic beacon system (ADR-024) to provide distance 
 
 **Goal**: High-bandwidth peer-to-peer clusters
 
-- [ ] Create `eche-wifi-direct` crate
+- [ ] Create `peat-wifi-direct` crate
 - [ ] Implement `WifiDirectTransport`
 - [ ] Handle group formation (GO negotiation)
 - [ ] Integrate with IP-based QUIC after connection

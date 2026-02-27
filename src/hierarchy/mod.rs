@@ -38,7 +38,7 @@ pub enum NodeRole {
 /// # Example
 ///
 /// ```ignore
-/// use eche_mesh::hierarchy::{HierarchyStrategy, StaticHierarchyStrategy, NodeRole};
+/// use peat_mesh::hierarchy::{HierarchyStrategy, StaticHierarchyStrategy, NodeRole};
 ///
 /// let strategy = StaticHierarchyStrategy {
 ///     assigned_level: HierarchyLevel::Squad,

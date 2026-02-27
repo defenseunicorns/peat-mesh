@@ -1,6 +1,6 @@
 # ADR-0007: Consumer Interface Adapters (Compatibility Layer)
 
-> **Provenance**: Transferred from eche repo ADR-043. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-043. Renumbered for peat-mesh.
 
 **Status**: Proposed  
 **Date**: 2026-01-06 (Updated: 2025-01-31)  
@@ -12,15 +12,15 @@
 - [ADR-042](042-direct-udp-bypass-pathway.md) (Direct UDP Bypass Pathway)
 - [ADR-005](005-datasync-abstraction-layer.md) (Data Sync Abstraction Layer)
 - [ADR-049](049-schema-extraction-and-codegen.md) (Schema Extraction)
-- [ADR-050](050-sdk-integration.md) (Eche SDK - Optimal Integration Path)
+- [ADR-050](050-sdk-integration.md) (Peat SDK - Optimal Integration Path)
 
 ---
 
 ## Executive Summary
 
-This ADR defines **Consumer Interface Adapters** - network-based interfaces (WebSocket, TCP, HTTP/REST) that enable external systems to interact with Eche nodes.
+This ADR defines **Consumer Interface Adapters** - network-based interfaces (WebSocket, TCP, HTTP/REST) that enable external systems to interact with Peat nodes.
 
-> **⚠️ IMPORTANT**: Consumer interface adapters are the **compatibility layer**, not the optimal integration path. Systems that can integrate the Eche SDK directly (ADR-050) should do so for better performance, offline capability, and full CRDT benefits. These adapters exist for systems that **cannot** be modified to embed the SDK.
+> **⚠️ IMPORTANT**: Consumer interface adapters are the **compatibility layer**, not the optimal integration path. Systems that can integrate the Peat SDK directly (ADR-050) should do so for better performance, offline capability, and full CRDT benefits. These adapters exist for systems that **cannot** be modified to embed the SDK.
 
 ---
 
@@ -39,7 +39,7 @@ This ADR defines **Consumer Interface Adapters** - network-based interfaces (Web
 ┌─────────────────────────┐   ┌─────────────────────────────────┐
 │          YES            │   │              NO                  │
 │                         │   │                                  │
-│  Use eche-sdk           │   │  Use Consumer Interface Adapters│
+│  Use peat-sdk           │   │  Use Consumer Interface Adapters│
 │  (ADR-050)              │   │  (This ADR)                     │
 │                         │   │                                  │
 │  • Full CRDT sync       │   │  • Request/response only        │
@@ -101,7 +101,7 @@ Platform A ──CRDT Sync──► Platform B
 ### Adapter Integration (Compatibility Path)
 
 ```
-Legacy System ──HTTP/WS──► Adapter ──Query──► Eche ──Response──► Adapter ──HTTP/WS──► Legacy
+Legacy System ──HTTP/WS──► Adapter ──Query──► Peat ──Response──► Adapter ──HTTP/WS──► Legacy
               ~20ms        ~5ms      ~10ms     ~5ms      ~5ms       ~20ms
                                                                     
 Total: ~65ms minimum, typically 100-200ms
@@ -113,7 +113,7 @@ Total: ~65ms minimum, typically 100-200ms
 |-----------|---------|-------|
 | Network to Adapter | 10-50ms | Depends on network topology |
 | Protocol parsing | 1-5ms | JSON/Protobuf decode |
-| Eche query | 5-20ms | Local CRDT read |
+| Peat query | 5-20ms | Local CRDT read |
 | Response serialization | 1-5ms | JSON/Protobuf encode |
 | Network from Adapter | 10-50ms | Return path |
 | **Total** | **50-200ms** | Per request |
@@ -131,7 +131,7 @@ Total: ~65ms minimum, typically 100-200ms
 
 ### Problem Statement
 
-The Eche Protocol's primary interface is via **direct Rust API integration** using the `eche-protocol` and `eche-ffi` crates, or the **Eche SDK** (ADR-050) for multi-language support. However, many potential consumers cannot integrate at this level:
+The Peat Protocol's primary interface is via **direct Rust API integration** using the `peat-protocol` and `peat-ffi` crates, or the **Peat SDK** (ADR-050) for multi-language support. However, many potential consumers cannot integrate at this level:
 
 1. **Legacy C2 Systems**: Existing command and control systems built on older stacks
 2. **Web Dashboards**: Browser-based monitoring and control interfaces
@@ -164,11 +164,11 @@ pub trait TakTransport: Send + Sync {
 }
 ```
 
-This pattern works for **outbound integration** (Eche -> TAK). We need the inverse for **consumer interfaces** (External Systems -> Eche).
+This pattern works for **outbound integration** (Peat -> TAK). We need the inverse for **consumer interfaces** (External Systems -> Peat).
 
 ### Existing Infrastructure
 
-The `eche-transport` crate already provides basic HTTP/REST endpoints:
+The `peat-transport` crate already provides basic HTTP/REST endpoints:
 
 ```
 GET /api/v1/status - Node status
@@ -188,11 +188,11 @@ This needs extension for:
 
 ### Consumer Interface Adapter Architecture
 
-We will implement **Consumer Interface Adapters** as a facade layer over the Eche Protocol API, supporting multiple transport protocols with unified semantics.
+We will implement **Consumer Interface Adapters** as a facade layer over the Peat Protocol API, supporting multiple transport protocols with unified semantics.
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Eche Node                                        │
+│                         Peat Node                                        │
 │                                                                          │
 │  ┌─────────────────────────────────────────────────────────────────┐   │
 │  │               Consumer Interface Layer (This ADR)                │   │
@@ -214,7 +214,7 @@ We will implement **Consumer Interface Adapters** as a facade layer over the Ech
 │                              │                                          │
 │                              ▼                                          │
 │                     ┌────────────────┐                                  │
-│                     │ eche-protocol  │                                  │
+│                     │ peat-protocol  │                                  │
 │                     │     API        │                                  │
 │                     └────────────────┘                                  │
 │                                                                          │
@@ -394,7 +394,7 @@ WebSocket provides bidirectional streaming for real-time applications:
 pub struct WebSocketAdapter {
     config: WebSocketConfig,
     sessions: Arc<RwLock<HashMap<String, Arc<WebSocketSession>>>>,
-    eche: Arc<EcheClient>,
+    peat: Arc<PeatClient>,
     metrics: Arc<AdapterMetrics>,
     running: AtomicBool,
     shutdown: broadcast::Sender<()>,
@@ -425,10 +425,10 @@ pub struct WebSocketConfig {
 }
 
 impl WebSocketAdapter {
-    pub fn new(config: WebSocketConfig, eche: Arc<EcheClient>) -> Self {
+    pub fn new(config: WebSocketConfig, peat: Arc<PeatClient>) -> Self {
         Self {
             sessions: Arc::new(RwLock::new(HashMap::new())),
-            eche,
+            peat,
             metrics: Arc::new(AdapterMetrics::default()),
             running: AtomicBool::new(false),
             shutdown: broadcast::channel(1).0,
@@ -487,7 +487,7 @@ TCP provides a simple, reliable interface for legacy systems:
 pub struct TcpAdapter {
     config: TcpConfig,
     sessions: Arc<RwLock<HashMap<String, Arc<TcpSession>>>>,
-    eche: Arc<EcheClient>,
+    peat: Arc<PeatClient>,
     metrics: Arc<AdapterMetrics>,
     running: AtomicBool,
     shutdown: broadcast::Sender<()>,
@@ -569,7 +569,7 @@ HTTP/REST provides a familiar interface for scripting and automation:
 /// HTTP/REST consumer adapter
 pub struct HttpAdapter {
     config: HttpConfig,
-    eche: Arc<EcheClient>,
+    peat: Arc<PeatClient>,
     metrics: Arc<AdapterMetrics>,
     running: AtomicBool,
     shutdown: broadcast::Sender<()>,
@@ -643,27 +643,27 @@ pub struct InterfaceCoordinator {
 }
 
 impl InterfaceCoordinator {
-    pub fn new(config: CoordinatorConfig, eche: Arc<EcheClient>) -> Self {
+    pub fn new(config: CoordinatorConfig, peat: Arc<PeatClient>) -> Self {
         let mut adapters: Vec<Box<dyn ConsumerAdapter>> = Vec::new();
 
         if config.websocket.enabled {
             adapters.push(Box::new(WebSocketAdapter::new(
                 config.websocket.clone(),
-                eche.clone(),
+                peat.clone(),
             )));
         }
 
         if config.tcp.enabled {
             adapters.push(Box::new(TcpAdapter::new(
                 config.tcp.clone(),
-                eche.clone(),
+                peat.clone(),
             )));
         }
 
         if config.http.enabled {
             adapters.push(Box::new(HttpAdapter::new(
                 config.http.clone(),
-                eche.clone(),
+                peat.clone(),
             )));
         }
 
@@ -709,7 +709,7 @@ impl InterfaceCoordinator {
 ### YAML Configuration
 
 ```yaml
-# eche-config.yaml
+# peat-config.yaml
 
 consumer_interfaces:
   # WebSocket for real-time dashboards
@@ -718,8 +718,8 @@ consumer_interfaces:
     listen_addr: "0.0.0.0:8080"
     path: "/ws"
     tls:
-      cert: "/etc/eche/tls/cert.pem"
-      key: "/etc/eche/tls/key.pem"
+      cert: "/etc/peat/tls/cert.pem"
+      key: "/etc/peat/tls/key.pem"
     max_connections: 100
     ping_interval_secs: 30
     cors_origins:
@@ -740,8 +740,8 @@ consumer_interfaces:
     listen_addr: "0.0.0.0:8081"
     base_path: "/api/v1"
     tls:
-      cert: "/etc/eche/tls/cert.pem"
-      key: "/etc/eche/tls/key.pem"
+      cert: "/etc/peat/tls/cert.pem"
+      key: "/etc/peat/tls/key.pem"
     cors:
       allowed_origins: ["*"]
       allowed_methods: ["GET", "POST", "PUT", "DELETE"]
@@ -903,7 +903,7 @@ pub struct CoordinatorMetrics {
 
 ### Phase 1: HTTP/REST Adapter
 
-- [ ] Extend `eche-transport` with full REST API
+- [ ] Extend `peat-transport` with full REST API
 - [ ] Add SSE streaming endpoint
 - [ ] Implement authentication middleware
 - [ ] Add rate limiting
@@ -1020,7 +1020,7 @@ pub struct CoordinatorMetrics {
 
 1. [ADR-029](029-tak-transport-adapter.md) - TAK Transport pattern
 2. [ADR-032](032-pluggable-transport-abstraction.md) - Transport abstraction
-3. [ADR-050](050-sdk-integration.md) - Eche SDK (Optimal Integration Path)
+3. [ADR-050](050-sdk-integration.md) - Peat SDK (Optimal Integration Path)
 4. [ADR-049](049-schema-extraction-and-codegen.md) - Schema Extraction
 5. [WebSocket RFC 6455](https://tools.ietf.org/html/rfc6455)
 6. [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events)

@@ -1,6 +1,6 @@
 # ADR-0008: Zarf/UDS Integration for Tactical Software Delivery
 
-> **Provenance**: Transferred from eche repo ADR-045. Renumbered for eche-mesh.
+> **Provenance**: Transferred from peat repo ADR-045. Renumbered for peat-mesh.
 
 **Status**: Proposed
 **Date**: 2025-01-09
@@ -24,7 +24,7 @@ Existing solutions address parts of this problem:
 | **Zarf** | Air-gap packaging, OCI distribution | Single cluster focus, no mesh coordination |
 | **Kubernetes** | Container orchestration | Assumes connected control plane |
 | **GitOps (Flux/Argo)** | Declarative deployment | Requires Git connectivity |
-| **Eche** | Mesh sync, hierarchical coordination | No container/K8s deployment |
+| **Peat** | Mesh sync, hierarchical coordination | No container/K8s deployment |
 
 ### Defense Unicorns Ecosystem
 
@@ -44,35 +44,35 @@ Existing solutions address parts of this problem:
 
 ### Integration Opportunity
 
-Eche + Zarf/UDS creates a complete tactical software delivery stack:
+Peat + Zarf/UDS creates a complete tactical software delivery stack:
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
 │                     Cloud / Enterprise                                   │
 │  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐                  │
-│  │ Zarf Build  │───▶│ OCI Registry│───▶│ Eche Gateway│                  │
+│  │ Zarf Build  │───▶│ OCI Registry│───▶│ Peat Gateway│                  │
 │  │  Pipeline   │    │  (packages) │    │  (metadata) │                  │
 │  └─────────────┘    └─────────────┘    └──────┬──────┘                  │
 └─────────────────────────────────────────────────┼────────────────────────┘
-                                                  │ Eche Sync
+                                                  │ Peat Sync
                     ┌─────────────────────────────┼─────────────────────────┐
                     │           FOB / Base        ▼                         │
                     │  ┌─────────────┐    ┌─────────────┐                   │
-                    │  │ Zarf Mirror │◀───│ Eche Node   │                   │
+                    │  │ Zarf Mirror │◀───│ Peat Node   │                   │
                     │  │  Registry   │    │ (metadata)  │                   │
                     │  └──────┬──────┘    └──────┬──────┘                   │
                     └─────────┼──────────────────┼─────────────────────────┘
-                              │                  │ Eche Sync
+                              │                  │ Peat Sync
               ┌───────────────┼──────────────────┼───────────────┐
               │     Vehicle   ▼                  ▼               │
               │  ┌─────────────┐    ┌─────────────┐              │
-              │  │ Zarf Deploy │◀───│ Eche Node   │              │
+              │  │ Zarf Deploy │◀───│ Peat Node   │              │
               │  │   (K3s)     │    │ (commands)  │              │
               │  └─────────────┘    └─────────────┘              │
               └──────────────────────────────────────────────────┘
 ```
 
-**Eche provides:**
+**Peat provides:**
 - Package metadata propagation across the mesh
 - Deployment intent/command distribution
 - Status aggregation up the hierarchy
@@ -87,9 +87,9 @@ Eche + Zarf/UDS creates a complete tactical software delivery stack:
 
 ## Decision
 
-### 1. Eche as Metadata Backplane
+### 1. Peat as Metadata Backplane
 
-Eche synchronizes **metadata about packages and deployments**, not the packages themselves:
+Peat synchronizes **metadata about packages and deployments**, not the packages themselves:
 
 ```protobuf
 // Package availability advertisement
@@ -168,9 +168,9 @@ package_mirrors/         # Which registries have which packages
 1. BUILD (Cloud)
    ├─ CI/CD builds Zarf package
    ├─ Pushes to OCI registry
-   └─ Publishes ZarfPackageAvailable to Eche
+   └─ Publishes ZarfPackageAvailable to Peat
 
-2. PROPAGATE (Eche Sync)
+2. PROPAGATE (Peat Sync)
    ├─ Package metadata syncs through hierarchy
    ├─ Each node learns what packages exist
    └─ Mirrors can pre-pull packages
@@ -186,7 +186,7 @@ package_mirrors/         # Which registries have which packages
    ├─ Executes: zarf package deploy
    └─ Reports DeploymentStatus
 
-5. AGGREGATE (Eche Hierarchy)
+5. AGGREGATE (Peat Hierarchy)
    ├─ Status documents sync upward
    ├─ Leaders aggregate subordinate status
    └─ Operator sees convergence progress
@@ -221,10 +221,10 @@ store.write_targeted(
 
 ### 5. Integration Points
 
-#### Eche Side
+#### Peat Side
 
 ```rust
-// New crate: eche-zarf (or module in eche-protocol)
+// New crate: peat-zarf (or module in peat-protocol)
 
 pub struct ZarfIntegration {
     store: Arc<dyn DocumentStore>,
@@ -251,24 +251,24 @@ impl ZarfIntegration {
 Alternatively, integrate via Kubernetes:
 
 ```typescript
-// Pepr capability that watches Eche and triggers Zarf
-When(EcheDeploymentIntent)
+// Pepr capability that watches Peat and triggers Zarf
+When(PeatDeploymentIntent)
   .IsCreated()
   .Then(async (intent) => {
-    // Pull package from nearest Eche-advertised mirror
+    // Pull package from nearest Peat-advertised mirror
     const mirror = await findNearestMirror(intent.packageName);
 
     // Execute Zarf deployment
     await exec(`zarf package deploy ${mirror}/${intent.packageName}`);
 
-    // Report status back to Eche
+    // Report status back to Peat
     await reportDeploymentStatus(intent.id, "DEPLOYED");
   });
 ```
 
 ### 6. Security Considerations
 
-- **Deployment intents MUST be signed** by authorized issuer (uses Eche security layer)
+- **Deployment intents MUST be signed** by authorized issuer (uses Peat security layer)
 - **Package verification** via Zarf's built-in signature/SBOM verification
 - **RBAC**: Only authorized nodes can issue deployment intents
 - **Audit trail**: All intents and status changes recorded in CRDT history
@@ -277,10 +277,10 @@ When(EcheDeploymentIntent)
 
 ### Positive
 
-- **Complete stack**: Eche + Zarf covers cloud-to-edge software delivery
+- **Complete stack**: Peat + Zarf covers cloud-to-edge software delivery
 - **Disconnected operation**: Both tools designed for air-gap/intermittent connectivity
 - **Open source**: Full stack is FOSS, no vendor lock-in
-- **Separation of concerns**: Eche does coordination, Zarf does deployment
+- **Separation of concerns**: Peat does coordination, Zarf does deployment
 - **Existing ecosystem**: Leverage UDS Core, Pepr, existing Zarf packages
 
 ### Negative
@@ -292,14 +292,14 @@ When(EcheDeploymentIntent)
 
 ### Neutral
 
-- **Not replacing Zarf features**: Eche doesn't do OCI, Helm, or K8s deployment
-- **Not replacing Eche features**: Zarf doesn't do mesh sync or CRDT
+- **Not replacing Zarf features**: Peat doesn't do OCI, Helm, or K8s deployment
+- **Not replacing Peat features**: Zarf doesn't do mesh sync or CRDT
 
 ## Alternatives Considered
 
-### 1. Eche-Native Package Distribution
+### 1. Peat-Native Package Distribution
 
-Build package distribution into Eche using blob transfer (ADR-025).
+Build package distribution into Peat using blob transfer (ADR-025).
 
 **Rejected**: Reinventing Zarf's capabilities. Zarf already handles air-gap packaging well.
 
@@ -311,7 +311,7 @@ Use GitOps for deployment coordination.
 
 ### 3. Direct Zarf Push
 
-Use Zarf's OCI push capabilities directly without Eche.
+Use Zarf's OCI push capabilities directly without Peat.
 
 **Rejected**: No mesh coordination, no status aggregation, no store-and-forward.
 
@@ -319,7 +319,7 @@ Use Zarf's OCI push capabilities directly without Eche.
 
 ### Phase 1: Schema & Collections
 - Define Protobuf messages for package/intent/status
-- Create collections in eche-schema
+- Create collections in peat-schema
 - Basic CRUD operations
 
 ### Phase 2: Targeted Delivery (ADR-046)
@@ -327,7 +327,7 @@ Use Zarf's OCI push capabilities directly without Eche.
 - Selector-based targeting
 - Delivery confirmation
 
-### Phase 3: Eche-Zarf Bridge
+### Phase 3: Peat-Zarf Bridge
 - Watch for intents, execute Zarf
 - Package advertisement
 - Status reporting

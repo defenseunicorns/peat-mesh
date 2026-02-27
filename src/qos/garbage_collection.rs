@@ -8,7 +8,7 @@
 //! # Example
 //!
 //! ```rust,ignore
-//! use eche_protocol::qos::{GarbageCollector, GcConfig};
+//! use peat_protocol::qos::{GarbageCollector, GcConfig};
 //!
 //! // Create GC with default config (5 minute interval)
 //! let gc = GarbageCollector::new(store.clone(), GcConfig::default());
@@ -476,7 +476,7 @@ impl<S: GcStore> GarbageCollector<S> {
 /// # Example
 ///
 /// ```rust,ignore
-/// use eche_protocol::qos::{GarbageCollector, GcConfig, start_periodic_gc};
+/// use peat_protocol::qos::{GarbageCollector, GcConfig, start_periodic_gc};
 /// use std::sync::Arc;
 ///
 /// let gc = Arc::new(GarbageCollector::new(store.clone(), GcConfig::default()));

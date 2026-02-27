@@ -3,10 +3,10 @@
 //! These tests validate the hierarchy strategy system in multi-node scenarios,
 //! including dynamic election, role transitions, and lateral peer coordination.
 
-use eche_mesh::beacon::{
+use peat_mesh::beacon::{
     GeoPosition, GeographicBeacon, HierarchyLevel, NodeMobility, NodeProfile, NodeResources,
 };
-use eche_mesh::hierarchy::{
+use peat_mesh::hierarchy::{
     DynamicHierarchyStrategy, ElectionConfig, HierarchyStrategy, HybridHierarchyStrategy, NodeRole,
     StaticHierarchyStrategy,
 };

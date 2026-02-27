@@ -2,10 +2,10 @@
 //!
 //! Run with: `cargo run --example broker_service --features automerge-backend,broker`
 
-use eche_mesh::{
+use peat_mesh::{
     broker::{Broker, BrokerConfig},
     security::{DeviceKeypair, FormationKey},
-    EcheMeshBuilder, MeshConfig, MeshDiscoveryConfig,
+    MeshConfig, MeshDiscoveryConfig, PeatMeshBuilder,
 };
 use std::sync::Arc;
 use std::time::Duration;
@@ -21,7 +21,7 @@ fn main() {
             node_id: Some("broker-example".into()),
             discovery: MeshDiscoveryConfig {
                 mdns_enabled: true,
-                service_name: "eche-broker-example".into(),
+                service_name: "peat-broker-example".into(),
                 interval: Duration::from_secs(30),
             },
             ..Default::default()
@@ -32,7 +32,7 @@ fn main() {
         let formation_key =
             FormationKey::from_base64("broker-formation", &formation_secret).expect("valid key");
 
-        let mesh = EcheMeshBuilder::new(config)
+        let mesh = PeatMeshBuilder::new(config)
             .with_device_keypair(device_keypair)
             .with_formation_key(formation_key)
             .build();

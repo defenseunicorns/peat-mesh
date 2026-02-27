@@ -3,7 +3,7 @@
 //! Run with: `cargo run --example document_sync --features automerge-backend`
 
 use automerge::{transaction::Transactable, Automerge, ReadDoc, ROOT};
-use eche_mesh::storage::AutomergeStore;
+use peat_mesh::storage::AutomergeStore;
 use std::sync::Arc;
 
 fn main() {

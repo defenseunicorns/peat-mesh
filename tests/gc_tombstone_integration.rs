@@ -8,10 +8,10 @@
 #![cfg(feature = "automerge-backend")]
 
 use automerge::transaction::Transactable;
-use eche_mesh::qos::{
+use peat_mesh::qos::{
     DeletionPolicyRegistry, GarbageCollector, GcConfig, GcStore, ResurrectionPolicy, Tombstone,
 };
-use eche_mesh::storage::AutomergeStore;
+use peat_mesh::storage::AutomergeStore;
 use std::sync::Arc;
 use std::time::{Duration, SystemTime};
 use tempfile::TempDir;
@@ -468,7 +468,7 @@ async fn test_periodic_gc_start_stop() {
 
     assert!(!gc.is_running());
 
-    let handle = eche_mesh::qos::start_periodic_gc(gc.clone());
+    let handle = peat_mesh::qos::start_periodic_gc(gc.clone());
 
     // Give it a moment to run
     tokio::time::sleep(Duration::from_millis(200)).await;

@@ -34,7 +34,7 @@ pub mod ttl_manager;
 #[cfg(feature = "automerge-backend")]
 pub mod typed_collection;
 
-// Sync coordination (extracted from eche-mesh)
+// Sync coordination (extracted from peat-mesh)
 #[cfg(feature = "automerge-backend")]
 pub mod automerge_sync;
 #[cfg(feature = "automerge-backend")]
