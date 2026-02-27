@@ -1,4 +1,4 @@
-# Multi-stage build for eche-mesh-node
+# Multi-stage build for peat-mesh-node
 # Builder uses mold linker per .cargo/config.toml
 
 FROM rust:1.93-bookworm AS builder
@@ -16,27 +16,27 @@ COPY .cargo .cargo
 
 # Create dummy sources to cache dependencies
 RUN mkdir -p src/bin examples && \
-    echo "fn main() {}" > src/bin/eche-mesh-node.rs && \
+    echo "fn main() {}" > src/bin/peat-mesh-node.rs && \
     echo "// dummy" > src/lib.rs && \
     echo "fn main() {}" > examples/basic_mesh.rs && \
     echo "fn main() {}" > examples/document_sync.rs && \
     echo "fn main() {}" > examples/broker_service.rs && \
-    cargo build --release --bin eche-mesh-node --features node 2>/dev/null || true
+    cargo build --release --bin peat-mesh-node --features node 2>/dev/null || true
 
 # Copy real source and build
 COPY src src
 COPY examples examples
-RUN touch src/lib.rs src/bin/eche-mesh-node.rs && \
-    cargo build --release --bin eche-mesh-node --features node
+RUN touch src/lib.rs src/bin/peat-mesh-node.rs && \
+    cargo build --release --bin peat-mesh-node --features node
 
-# ── Runtime ──────────────────────────────────────────────────────
+# -- Runtime ------------------------------------------------------------------
 FROM debian:bookworm-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates tini curl \
     && rm -rf /var/lib/apt/lists/*
 
-COPY --from=builder /build/target/release/eche-mesh-node /usr/local/bin/eche-mesh-node
+COPY --from=builder /build/target/release/peat-mesh-node /usr/local/bin/peat-mesh-node
 
 # Broker HTTP/WS
 EXPOSE 8081/tcp
@@ -44,4 +44,4 @@ EXPOSE 8081/tcp
 EXPOSE 11204/udp
 
 ENTRYPOINT ["tini", "--"]
-CMD ["eche-mesh-node"]
+CMD ["peat-mesh-node"]

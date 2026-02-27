@@ -44,7 +44,7 @@ pub const FORMATION_CHALLENGE_SIZE: usize = 32;
 pub const FORMATION_RESPONSE_SIZE: usize = 32;
 
 /// HKDF info string for formation key derivation
-const HKDF_INFO_FORMATION: &[u8] = b"eche-protocol-v1-formation";
+const HKDF_INFO_FORMATION: &[u8] = b"peat-protocol-v1-formation";
 
 type HmacSha256 = Hmac<Sha256>;
 

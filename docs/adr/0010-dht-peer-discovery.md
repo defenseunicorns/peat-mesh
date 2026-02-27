@@ -11,7 +11,7 @@ ADR-0003 established a multi-tier discovery architecture: Tier 1 (beacon-based l
 discovery) is implemented, and Tier 2 (DHT-based global discovery) was reserved for
 future work. The original ADR proposed libp2p-kad (Kademlia) for DHT discovery.
 
-Since then, eche-mesh has standardized on **Iroh 0.95** as the networking layer. Iroh
+Since then, peat-mesh has standardized on **Iroh 0.95** as the networking layer. Iroh
 ships with built-in discovery primitives that use the **Mainline BitTorrent DHT** via
 **pkarr** (Public Key Addressable Resource Records). This ADR evaluates Iroh's
 discovery APIs and proposes an implementation path that leverages them instead of
@@ -19,7 +19,7 @@ adding libp2p-kad as a separate dependency.
 
 ### Current State
 
-eche-mesh uses `StaticProvider` as the sole Iroh discovery mechanism. External
+peat-mesh uses `StaticProvider` as the sole Iroh discovery mechanism. External
 discovery strategies (Kubernetes EndpointSlice, mDNS, static TOML) feed peer addresses
 into the `StaticProvider` via `PeerConnector`:
 
@@ -91,7 +91,7 @@ pub fn user_data_for_discovery(self, user_data: UserData) -> Builder
 
 Applications can attach up to 245 bytes of opaque metadata to their pkarr record.
 Iroh does not interpret `UserData`; it is propagated to resolvers alongside address
-info. Eche can use this to carry formation identifiers.
+info. Peat can use this to carry formation identifiers.
 
 ### iroh-gossip
 
@@ -105,13 +105,13 @@ Separate from the Discovery trait, `iroh-gossip` provides topic-based pub/sub:
 ## The Formation-vs-Node Mismatch
 
 Iroh's discovery is **node-keyed**: you resolve a specific `EndpointId` (public key)
-to get its addresses. Eche needs **formation-keyed** discovery: "find all peers in
+to get its addresses. Peat needs **formation-keyed** discovery: "find all peers in
 formation X."
 
 This is a fundamental mismatch:
 
 - **Pkarr resolve**: "I know node `abc123`'s public key, give me its addresses" (works)
-- **Eche needs**: "I have formation secret `S`, give me all member nodes" (not directly supported)
+- **Peat needs**: "I have formation secret `S`, give me all member nodes" (not directly supported)
 
 You cannot query the DHT for "all records with UserData containing formation ID F"
 because pkarr records are keyed by public key, not by content.
@@ -123,7 +123,7 @@ primitives without requiring libp2p-kad:
 
 ### Layer 1: Node Reachability (Pkarr)
 
-Every eche-mesh node publishes its own addressing info to the DHT via
+Every peat-mesh node publishes its own addressing info to the DHT via
 `PkarrPublisher`. This makes any node reachable by anyone who knows its
 `EndpointId`:
 
@@ -135,7 +135,7 @@ let builder = Endpoint::builder()
         Box::new(PkarrResolver::default()),        // resolve from DHT
     ]))
     .user_data_for_discovery(
-        UserData::try_from(format!("eche:f={}", formation_id))?
+        UserData::try_from(format!("peat:f={}", formation_id))?
     );
 ```
 
@@ -155,7 +155,7 @@ to bootstrap formation membership:
 let topic_id = {
     let hk = Hkdf::<Sha256>::new(None, &formation_secret);
     let mut topic = [0u8; 32];
-    hk.expand(b"eche-mesh:gossip-topic", &mut topic)?;
+    hk.expand(b"peat-mesh:gossip-topic", &mut topic)?;
     TopicId::from(topic)
 };
 
@@ -256,12 +256,12 @@ PeerConnector feeds addresses into StaticProvider
 **Scope**: Wire gossip bootstrap to existing discovery strategies.
 
 1. `HybridDiscovery` feeds initial bootstrap peers to gossip
-2. Add `ECHE_SEED_PEERS` env var (comma-separated EndpointIds)
-3. Update `eche-mesh-node` binary to wire gossip when `dht-discovery` enabled
+2. Add `PEAT_SEED_PEERS` env var (comma-separated EndpointIds)
+3. Update `peat-mesh-node` binary to wire gossip when `dht-discovery` enabled
 4. Add K8s annotation for EndpointId (already partially implemented)
 
 **Files**:
-- `src/bin/eche-mesh-node.rs` — gossip wiring
+- `src/bin/peat-mesh-node.rs` — gossip wiring
 - `src/discovery/hybrid.rs` — feed bootstrap to gossip
 - `src/peer_connector.rs` — handle gossip-originated events
 

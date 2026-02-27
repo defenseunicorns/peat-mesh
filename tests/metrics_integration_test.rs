@@ -3,8 +3,8 @@
 //! These tests demonstrate how the metrics system works with TopologyBuilder
 //! to provide insights into topology formation, connection health, and performance.
 
-use eche_mesh::beacon::HierarchyLevel;
-use eche_mesh::topology::{
+use peat_mesh::beacon::HierarchyLevel;
+use peat_mesh::topology::{
     InMemoryMetricsCollector, MetricsCollector, NoOpMetricsCollector, TopologyConfig,
 };
 use std::time::Duration;

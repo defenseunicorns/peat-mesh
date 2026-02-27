@@ -1,13 +1,13 @@
 [package]
-name = "eche-mesh"
+name = "peat-mesh"
 version = "0.3.0"
 edition = "2021"
 authors = ["Kit Plummer <kitplummer@defenseunicorns.com>"]
 license = "Apache-2.0"
-description = "Eche mesh networking library with CRDT sync, transport security, and topology management"
-repository = "https://github.com/defenseunicorns/eche-mesh"
-documentation = "https://docs.rs/eche-mesh"
-homepage = "https://github.com/defenseunicorns/eche-mesh"
+description = "Peat mesh networking library with CRDT sync, transport security, and topology management"
+repository = "https://github.com/defenseunicorns/peat-mesh"
+documentation = "https://docs.rs/peat-mesh"
+homepage = "https://github.com/defenseunicorns/peat-mesh"
 keywords = ["mesh", "networking", "crdt", "p2p", "topology"]
 categories = ["network-programming", "cryptography"]
 
@@ -51,12 +51,10 @@ toml = "0.8"
 
 # Peat-Lite transport (ADR-035, optional)
 log = { version = "0.4", optional = true }
-# TODO: uncomment after peat-lite v0.2.0 is published to crates.io
-# peat-lite = { version = "0.2", default-features = false, optional = true }
+peat-lite = { version = "0.2", default-features = false, optional = true }
 
 # Bluetooth LE transport (ADR-032/ADR-039, optional)
-# TODO: uncomment after eche-btle is published to crates.io
-# eche-btle = { version = "0.2", optional = true }
+peat-btle = { version = "0.2", optional = true }
 
 # HTTP/WS service broker (ADR-049 Phase 6)
 axum = { version = "0.7", features = ["macros", "ws", "multipart"], optional = true }
@@ -82,7 +80,7 @@ rand = { version = "0.9", optional = true }
 tokio-stream = { version = "0.1", optional = true }
 
 [[bin]]
-name = "eche-mesh-node"
+name = "peat-mesh-node"
 required-features = ["node"]
 
 [[example]]
@@ -98,10 +96,8 @@ required-features = ["automerge-backend", "broker"]
 
 [features]
 default = []
-# TODO: restore dep:peat-lite after it's published to crates.io
-lite-bridge = ["log"]
-# TODO: restore dep:eche-btle after it's published to crates.io
-bluetooth = []
+lite-bridge = ["log", "dep:peat-lite"]
+bluetooth = ["dep:peat-btle"]
 automerge-backend = ["automerge", "iroh", "iroh-blobs", "redb", "lru", "negentropy", "rand", "tokio-stream"]
 broker = ["axum", "tower", "tower-http"]
 kubernetes = ["kube", "k8s-openapi", "rustls"]

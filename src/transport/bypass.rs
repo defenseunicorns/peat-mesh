@@ -37,7 +37,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! use eche_mesh::transport::bypass::{UdpBypassChannel, BypassChannelConfig};
+//! use peat_mesh::transport::bypass::{UdpBypassChannel, BypassChannelConfig};
 //!
 //! // Create bypass channel
 //! let config = BypassChannelConfig::default();
@@ -338,7 +338,7 @@ impl BypassChannelConfig {
 /// ## Example
 ///
 /// ```rust
-/// use eche_mesh::transport::bypass::BypassSecurityConfig;
+/// use peat_mesh::transport::bypass::BypassSecurityConfig;
 ///
 /// // Minimal security for high-frequency telemetry
 /// let config = BypassSecurityConfig {
@@ -667,14 +667,14 @@ impl ReplayTracker {
 /// Bypass message header
 ///
 /// Compact 12-byte header for bypass messages:
-/// - Magic: 4 bytes ("ECHE")
+/// - Magic: 4 bytes ("PEAT")
 /// - Collection hash: 4 bytes (FNV-1a hash of collection name)
 /// - TTL: 2 bytes (milliseconds, max ~65s)
 /// - Flags: 1 byte
 /// - Sequence: 1 byte (wrapping counter)
 #[derive(Debug, Clone, Copy)]
 pub struct BypassHeader {
-    /// Magic number (0x45434845 = "ECHE")
+    /// Magic number (0x50454154 = "PEAT")
     pub magic: [u8; 4],
     /// Collection name hash (FNV-1a)
     pub collection_hash: u32,
@@ -687,7 +687,7 @@ pub struct BypassHeader {
 }
 
 impl BypassHeader {
-    /// Magic bytes: "ECHE"
+    /// Magic bytes: "PEAT"
     pub const MAGIC: [u8; 4] = [0x45, 0x43, 0x48, 0x45];
 
     /// Header size in bytes

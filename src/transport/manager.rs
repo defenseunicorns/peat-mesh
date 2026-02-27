@@ -27,7 +27,7 @@
 //! ## Example
 //!
 //! ```ignore
-//! use eche_mesh::transport::{
+//! use peat_mesh::transport::{
 //!     TransportManager, TransportManagerConfig,
 //!     MessageRequirements, MessagePriority, TransportType,
 //! };
@@ -996,7 +996,7 @@ pub enum RouteDecision {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::transport::{CollectionTransportRoute, TransportType};
+/// use peat_mesh::transport::{CollectionTransportRoute, TransportType};
 ///
 /// // Fixed route to BLE
 /// let ble_route = CollectionTransportRoute::Fixed {
@@ -1047,7 +1047,7 @@ pub struct CollectionRouteConfig {
 /// # Example
 ///
 /// ```
-/// use eche_mesh::transport::{
+/// use peat_mesh::transport::{
 ///     CollectionRouteTable, CollectionRouteConfig, CollectionTransportRoute,
 ///     TransportType, MessagePriority,
 /// };

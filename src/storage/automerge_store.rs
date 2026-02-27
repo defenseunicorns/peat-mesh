@@ -1013,7 +1013,7 @@ impl Collection for AutomergeCollection {
 
 // === GcStore trait implementation for AutomergeStore (ADR-034 Phase 3) ===
 //
-// Both GcStore trait and AutomergeStore type are in eche-mesh,
+// Both GcStore trait and AutomergeStore type are in peat-mesh,
 // so the impl lives here (orphan rule satisfied).
 
 impl crate::qos::GcStore for AutomergeStore {

@@ -1,14 +1,14 @@
-# ADR-0001: Running eche-mesh Nodes in Kubernetes with Istio Service Mesh
+# ADR-0001: Running peat-mesh Nodes in Kubernetes with Istio Service Mesh
 
 **Status:** Accepted
 **Date:** 2026-02-18
 **Updated:** 2026-02-19
 **Authors:** Kit Plummer
-**Deciders:** Eche Core Team
+**Deciders:** Peat Core Team
 
 ## Context
 
-eche-mesh was designed for tactical edge networks: air-gapped LANs, BLE mesh, and direct peer-to-peer connectivity. As Eche adoption grows, there is a need to run eche-mesh nodes inside Kubernetes clusters with Istio service mesh for cloud-hosted or hybrid deployments. This introduces significant architectural tensions between eche-mesh's peer-to-peer networking model and Kubernetes/Istio's proxy-mediated, service-oriented model.
+peat-mesh was designed for tactical edge networks: air-gapped LANs, BLE mesh, and direct peer-to-peer connectivity. As Peat adoption grows, there is a need to run peat-mesh nodes inside Kubernetes clusters with Istio service mesh for cloud-hosted or hybrid deployments. This introduces significant architectural tensions between peat-mesh's peer-to-peer networking model and Kubernetes/Istio's proxy-mediated, service-oriented model.
 
 This ADR examines the impacts across five domains: mesh creation, certificate management, discovery, Iroh/BLE connectivity, and cluster-to-cluster federation.
 
@@ -16,16 +16,16 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 
 | Component | Current Mechanism | Protocol | Network Assumptions |
 |---|---|---|---|
-| Discovery | mDNS (`_eche._udp.local.`) | UDP multicast 224.0.0.251:5353 | Same broadcast domain |
+| Discovery | mDNS (`_peat._udp.local.`) | UDP multicast 224.0.0.251:5353 | Same broadcast domain |
 | Identity | Ed25519 keypairs + formation keys | N/A (application layer) | None |
 | Iroh sync | QUIC (UDP) via iroh-blobs | UDP ephemeral ports | Direct IP reachability |
 | Bypass channel | Custom UDP multicast | UDP 239.1.1.100:5150 | Multicast-capable network |
-| BLE transport | BlueZ D-Bus / eche-btle | BLE GATT | Physical proximity |
+| BLE transport | BlueZ D-Bus / peat-btle | BLE GATT | Physical proximity |
 | Broker API | HTTP/WebSocket (Axum) | TCP 8081 | Standard TCP |
 
 ## Decision Drivers
 
-- Maintain eche-mesh's offline-first, zero-bootstrap design philosophy
+- Maintain peat-mesh's offline-first, zero-bootstrap design philosophy
 - Support hybrid deployments where cloud nodes coexist with edge/BLE nodes
 - Avoid creating hard dependencies on Kubernetes or Istio
 - Preserve the existing security model while interoperating with Istio mTLS
@@ -37,14 +37,14 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 
 ### 1. Mesh Creation
 
-**Problem:** eche-mesh forms meshes via mDNS multicast discovery and direct peer connections. Kubernetes pod networks (Calico, Cilium, Flannel) do not support multicast. Istio's Envoy sidecar intercepts all traffic, adding a proxy hop to every connection.
+**Problem:** peat-mesh forms meshes via mDNS multicast discovery and direct peer connections. Kubernetes pod networks (Calico, Cilium, Flannel) do not support multicast. Istio's Envoy sidecar intercepts all traffic, adding a proxy hop to every connection.
 
 **Specific challenges:**
 - mDNS uses UDP multicast (`224.0.0.251`), which is dropped by all major CNI plugins
 - Bypass channel uses custom multicast group `239.1.1.100`, also unsupported
 - Pod IP addresses are ephemeral and change on restart
 - Istio's Envoy sidecar intercepts outbound connections and applies traffic policies
-- eche-mesh expects direct peer-to-peer UDP, not proxy-mediated TCP
+- peat-mesh expects direct peer-to-peer UDP, not proxy-mediated TCP
 
 **Options:**
 
@@ -53,17 +53,17 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 | **A. Static discovery + headless Service** | Use `StaticDiscovery` with K8s headless Service DNS for stable peer addresses | Works with existing code; no mDNS needed | Must maintain peer list; doesn't auto-scale |
 | **B. Custom K8s discovery provider** | New `KubernetesDiscovery` strategy using K8s API (watch Endpoints) | Auto-discovers pods; scales naturally | New code; K8s API dependency; RBAC needed |
 | **C. Host networking** | `hostNetwork: true` to bypass pod network | mDNS works; bypass channel works | Breaks pod isolation; port conflicts; Istio sidecar complications |
-| **D. Sidecar discovery agent** | Sidecar container that watches K8s Endpoints and feeds static config to eche-mesh | No eche-mesh code changes; K8s-native | Operational complexity; sidecar coordination |
+| **D. Sidecar discovery agent** | Sidecar container that watches K8s Endpoints and feeds static config to peat-mesh | No peat-mesh code changes; K8s-native | Operational complexity; sidecar coordination |
 
 **Recommendation:** Start with **Option A** (static discovery + headless Service) for initial deployment, then build **Option B** (KubernetesDiscovery) as a proper discovery strategy behind the existing `DiscoveryStrategy` trait. This follows the existing pluggable pattern.
 
 ### 2. Certificate and Identity Management
 
-**Problem:** eche-mesh uses its own identity system (Ed25519 device keypairs + HMAC-SHA256 formation keys). Istio enforces its own mTLS using SPIFFE identities and X.509 certificates issued by `istiod`. These two identity systems will overlap, potentially conflict, or create redundant encryption layers.
+**Problem:** peat-mesh uses its own identity system (Ed25519 device keypairs + HMAC-SHA256 formation keys). Istio enforces its own mTLS using SPIFFE identities and X.509 certificates issued by `istiod`. These two identity systems will overlap, potentially conflict, or create redundant encryption layers.
 
 **Specific challenges:**
-- **Double encryption:** Istio mTLS encrypts pod-to-pod traffic. eche-mesh's optional ChaCha20-Poly1305 encryption adds a second layer. This is wasteful but not harmful.
-- **Identity mismatch:** Istio identifies workloads by SPIFFE ID (`spiffe://cluster.local/ns/eche/sa/eche-node`). eche-mesh identifies nodes by Ed25519 public key (first 16 bytes). These are independent identity planes.
+- **Double encryption:** Istio mTLS encrypts pod-to-pod traffic. peat-mesh's optional ChaCha20-Poly1305 encryption adds a second layer. This is wasteful but not harmful.
+- **Identity mismatch:** Istio identifies workloads by SPIFFE ID (`spiffe://cluster.local/ns/peat/sa/peat-node`). peat-mesh identifies nodes by Ed25519 public key (first 16 bytes). These are independent identity planes.
 - **Formation keys:** Pre-shared formation keys must still be distributed to pods. K8s Secrets or an external secret manager (Vault) would be needed.
 - **Key persistence:** `DeviceKeypair` is currently saved to disk. Pod restarts with ephemeral storage would generate new identities. StatefulSet with PVCs would preserve them.
 
@@ -71,11 +71,11 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 
 | Option | Description | Pros | Cons |
 |---|---|---|---|
-| **A. Dual identity (recommended)** | Keep both systems independent. Istio handles transport security. eche-mesh handles application identity. | Clean separation; no coupling; works if Istio is removed | Double encryption overhead (negligible for CRDT docs) |
-| **B. Istio-only identity** | Replace eche-mesh crypto with Istio mTLS; derive node IDs from SPIFFE | Single identity plane | Hard dependency on Istio; breaks edge/BLE; major refactor |
-| **C. Bridge identities** | Map SPIFFE IDs to eche-mesh node IDs via a registration service | Unified identity view | Complex; new service to maintain; partial coupling |
+| **A. Dual identity (recommended)** | Keep both systems independent. Istio handles transport security. peat-mesh handles application identity. | Clean separation; no coupling; works if Istio is removed | Double encryption overhead (negligible for CRDT docs) |
+| **B. Istio-only identity** | Replace peat-mesh crypto with Istio mTLS; derive node IDs from SPIFFE | Single identity plane | Hard dependency on Istio; breaks edge/BLE; major refactor |
+| **C. Bridge identities** | Map SPIFFE IDs to peat-mesh node IDs via a registration service | Unified identity view | Complex; new service to maintain; partial coupling |
 
-**Recommendation:** **Option A** (dual identity). Istio provides transport-layer security between pods. eche-mesh provides application-layer identity that works identically on edge, BLE, and cloud. Formation keys should be injected via K8s Secrets mounted as volumes.
+**Recommendation:** **Option A** (dual identity). Istio provides transport-layer security between pods. peat-mesh provides application-layer identity that works identically on edge, BLE, and cloud. Formation keys should be injected via K8s Secrets mounted as volumes.
 
 **Key persistence strategy:**
 - Deploy as **StatefulSet** with PersistentVolumeClaims so `DeviceKeypair` survives pod restarts
@@ -83,12 +83,12 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 
 ### 3. Discovery
 
-**Problem:** eche-mesh's discovery layer assumes LAN-level visibility. In Kubernetes, nodes need to discover peers across the pod network without multicast. Cross-cluster discovery adds another dimension.
+**Problem:** peat-mesh's discovery layer assumes LAN-level visibility. In Kubernetes, nodes need to discover peers across the pod network without multicast. Cross-cluster discovery adds another dimension.
 
 **Specific challenges:**
 - mDNS is non-functional in pod networks
-- K8s Services provide stable DNS but eche-mesh expects `DiscoveryEvent` streams
-- Istio's service registry is separate from eche-mesh's peer registry
+- K8s Services provide stable DNS but peat-mesh expects `DiscoveryEvent` streams
+- Istio's service registry is separate from peat-mesh's peer registry
 - Pods scale dynamically; peer lists must track additions and removals
 - Cross-namespace or cross-cluster peers need different discovery mechanisms
 
@@ -98,8 +98,8 @@ This ADR examines the impacts across five domains: mesh creation, certificate ma
 KubernetesDiscovery
 ├── Watches: Endpoints/EndpointSlice API for labeled pods
 ├── Emits: PeerFound / PeerLost / PeerUpdated events
-├── Labels: app=eche-mesh, eche.formation=<name>
-├── Annotations: eche.node-id, eche.public-key, eche.iroh-endpoint
+├── Labels: app=peat-mesh, peat.formation=<name>
+├── Annotations: peat.node-id, peat.public-key, peat.iroh-endpoint
 └── Scope: namespace (default) or cluster-wide (configurable)
 ```
 
@@ -107,7 +107,7 @@ KubernetesDiscovery
 
 ```rust
 // KubernetesDiscovery implements the existing DiscoveryStrategy trait
-// No changes to EcheMesh or other discovery strategies needed
+// No changes to PeatMesh or other discovery strategies needed
 impl DiscoveryStrategy for KubernetesDiscovery {
     async fn start(&mut self) -> Result<()>;
     async fn stop(&mut self) -> Result<()>;
@@ -125,7 +125,7 @@ impl DiscoveryStrategy for KubernetesDiscovery {
 - **Envoy and UDP:** Istio's Envoy proxy does not natively proxy arbitrary UDP. QUIC support in Envoy exists but is focused on HTTP/3, not custom ALPN protocols like `iroh-blobs`.
 - **Port management:** Iroh uses ephemeral UDP ports by default. K8s requires declared container ports for service exposure.
 - **NAT traversal:** Iroh's hole-punching assumes direct internet access. Pods behind cluster NAT cannot hole-punch to external peers.
-- **Relay servers:** Iroh supports relay servers for NAT traversal, but eche-mesh doesn't currently configure them.
+- **Relay servers:** Iroh supports relay servers for NAT traversal, but peat-mesh doesn't currently configure them.
 
 **Options:**
 
@@ -155,7 +155,7 @@ impl DiscoveryStrategy for KubernetesDiscovery {
                     │        Kubernetes Cluster        │
                     │                                  │
                     │  ┌──────────┐    ┌──────────┐   │
-                    │  │ eche-mesh│◄──►│ eche-mesh│   │
+                    │  │ peat-mesh│◄──►│ peat-mesh│   │
                     │  │  pod A   │    │  pod B   │   │
                     │  └────▲─────┘    └──────────┘   │
                     │       │ QUIC/Iroh               │
@@ -167,7 +167,7 @@ impl DiscoveryStrategy for KubernetesDiscovery {
                     ┌───────┴────────┐
                     │  Edge Gateway   │
                     │  (Pi / laptop)  │
-                    │  eche-mesh +    │
+                    │  peat-mesh +    │
                     │  BLE transport  │
                     └───────▲────────┘
                             │ BLE GATT
@@ -180,19 +180,19 @@ impl DiscoveryStrategy for KubernetesDiscovery {
 ```
 
 **Key design decisions:**
-- **Edge gateway pattern:** A eche-mesh node running on hardware with a BLE radio acts as a bridge between BLE devices and the cluster
+- **Edge gateway pattern:** A peat-mesh node running on hardware with a BLE radio acts as a bridge between BLE devices and the cluster
 - **No BLE in-cluster:** Do not attempt to passthrough BLE to containers; it's the wrong abstraction
 - **Gateway is a full mesh peer:** The edge gateway participates in CRDT sync over both BLE (to local devices) and QUIC/Iroh (to cluster)
 - **Multi-homed identity:** The gateway node has a single `DeviceKeypair` but participates in both transport domains
 
-**Impact on eche-mesh:**
+**Impact on peat-mesh:**
 - No code changes needed for BLE; the transport abstraction already handles this
-- Edge gateway is simply a eche-mesh node with both `bluetooth` and `automerge-backend` features enabled
+- Edge gateway is simply a peat-mesh node with both `bluetooth` and `automerge-backend` features enabled
 - Need to ensure the gateway can maintain simultaneous BLE and QUIC connections (already supported by `TransportManager`)
 
 ### 6. Cluster-to-Cluster Federation
 
-**Problem:** Multiple Kubernetes clusters (e.g., regional deployments, classification boundaries) need to synchronize eche-mesh state while maintaining independent mesh control planes.
+**Problem:** Multiple Kubernetes clusters (e.g., regional deployments, classification boundaries) need to synchronize peat-mesh state while maintaining independent mesh control planes.
 
 **Options:**
 
@@ -200,13 +200,13 @@ impl DiscoveryStrategy for KubernetesDiscovery {
 |---|---|---|---|
 | **A. Iroh relay bridge** | Dedicated relay servers at cluster edges; peers connect via relay URLs | Uses existing Iroh infrastructure; simple | Relay is a bottleneck; single point of failure |
 | **B. Gateway peer pattern** | Designated "federation gateway" pods in each cluster connect to each other | Controlled data flow; can apply policies | Must manage gateway peer list; new operational role |
-| **C. Istio multi-cluster** | Use Istio's built-in multi-cluster mesh (east-west gateway) | Transparent to eche-mesh; Istio-native | Complex Istio configuration; requires trust domain setup |
-| **D. VPN underlay** | WireGuard or similar VPN between clusters; eche-mesh sees a flat network | Works for all transports; simple for eche-mesh | VPN management overhead; latency; not always permitted |
+| **C. Istio multi-cluster** | Use Istio's built-in multi-cluster mesh (east-west gateway) | Transparent to peat-mesh; Istio-native | Complex Istio configuration; requires trust domain setup |
+| **D. VPN underlay** | WireGuard or similar VPN between clusters; peat-mesh sees a flat network | Works for all transports; simple for peat-mesh | VPN management overhead; latency; not always permitted |
 
 **Recommendation:** **Option B** (gateway peer pattern) as the primary mechanism, with **Option C** (Istio multi-cluster) as an alternative for organizations already running multi-cluster Istio.
 
 **Federation gateway design:**
-- Specific pods labeled `eche.role=federation-gateway`
+- Specific pods labeled `peat.role=federation-gateway`
 - Configured with static peer addresses of remote cluster gateways
 - Participates in CRDT sync and propagates documents across cluster boundary
 - Can apply filtering/policy on what documents cross the boundary (e.g., classification level)
@@ -220,25 +220,25 @@ impl DiscoveryStrategy for KubernetesDiscovery {
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
-  name: eche-mesh
-  namespace: eche
+  name: peat-mesh
+  namespace: peat
 spec:
-  serviceName: eche-mesh
+  serviceName: peat-mesh
   replicas: 3
   template:
     metadata:
       labels:
-        app: eche-mesh
+        app: peat-mesh
       annotations:
         # Exclude Iroh QUIC port from Envoy interception
         traffic.sidecar.istio.io/excludeOutboundPorts: "11204"
         traffic.sidecar.istio.io/excludeInboundPorts: "11204"
-        # eche-mesh identity metadata
-        eche.node-id: ""       # populated by init container
-        eche.public-key: ""    # populated by init container
+        # peat-mesh identity metadata
+        peat.node-id: ""       # populated by init container
+        peat.public-key: ""    # populated by init container
     spec:
       containers:
-      - name: eche-mesh
+      - name: peat-mesh
         ports:
         - name: broker-http
           containerPort: 8081
@@ -250,12 +250,12 @@ spec:
         - name: identity
           mountPath: /data/identity
         - name: formation-keys
-          mountPath: /etc/eche/formation-keys
+          mountPath: /etc/peat/formation-keys
           readOnly: true
         env:
-        - name: ECHE_DISCOVERY
+        - name: PEAT_DISCOVERY
           value: "kubernetes"
-        - name: ECHE_IROH_PORT
+        - name: PEAT_IROH_PORT
           value: "11204"
   volumeClaimTemplates:
   - metadata:
@@ -269,12 +269,12 @@ spec:
 apiVersion: v1
 kind: Service
 metadata:
-  name: eche-mesh
-  namespace: eche
+  name: peat-mesh
+  namespace: peat
 spec:
   clusterIP: None  # Headless for peer discovery
   selector:
-    app: eche-mesh
+    app: peat-mesh
   ports:
   - name: broker-http
     port: 8081
@@ -286,20 +286,20 @@ spec:
 
 ## 7. Exposing the Mesh to In-Cluster Services
 
-**Problem:** Other workloads running in the same Kubernetes cluster need to consume mesh state (read documents, subscribe to updates, write commands). These services may be written in Go, Python, TypeScript, or other languages and cannot embed the Rust eche-mesh library directly.
+**Problem:** Other workloads running in the same Kubernetes cluster need to consume mesh state (read documents, subscribe to updates, write commands). These services may be written in Go, Python, TypeScript, or other languages and cannot embed the Rust peat-mesh library directly.
 
 **Two integration paths exist (see ADR-0007, ADR-0009):**
 
 ### Path A: Consumer Interface Adapters (ADR-0007)
 
-The eche-mesh broker module (feature-gated behind `broker`) already provides HTTP/REST and WebSocket endpoints. In K8s, this becomes the primary way for cluster services to interact with mesh state.
+The peat-mesh broker module (feature-gated behind `broker`) already provides HTTP/REST and WebSocket endpoints. In K8s, this becomes the primary way for cluster services to interact with mesh state.
 
 ```
 ┌──────────────────────────────────────────────────────────────┐
 │                    Kubernetes Cluster                          │
 │                                                               │
 │  ┌──────────┐     ┌──────────────────────────────┐           │
-│  │ Go       │────►│ eche-mesh pod                 │           │
+│  │ Go       │────►│ peat-mesh pod                 │           │
 │  │ Operator │ HTTP│  ┌────────────────────────┐   │           │
 │  └──────────┘  :  │  │ Broker (Axum)          │   │           │
 │                8081│  │  GET /api/v1/documents │   │           │
@@ -325,12 +325,12 @@ The eche-mesh broker module (feature-gated behind `broker`) already provides HTT
 
 ### Path B: SDK Integration (ADR-0009)
 
-For services that can embed eche-mesh directly (Go via cgo, Python via PyO3), the SDK path provides full CRDT participation with no adapter overhead.
+For services that can embed peat-mesh directly (Go via cgo, Python via PyO3), the SDK path provides full CRDT participation with no adapter overhead.
 
 **K8s operator example (Go):**
 ```go
-// A Kubernetes operator that is also a eche-mesh peer
-node, _ := eche.NewEcheNode(eche.Config{
+// A Kubernetes operator that is also a peat-mesh peer
+node, _ := peat.NewPeatNode(peat.Config{
     PlatformID:  os.Getenv("HOSTNAME"),
     MeshBackend: "automerge",
     Transports:  []string{"iroh"},
@@ -359,7 +359,7 @@ for p := range platforms {
 
 ### Zarf/UDS Integration (ADR-0008)
 
-For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serves as the metadata backplane for package distribution and deployment coordination across the hierarchy. The Zarf integration consumes eche-mesh via either the broker API or Go SDK to:
+For Zarf-based deployments using UDS Core (which includes Istio), peat-mesh serves as the metadata backplane for package distribution and deployment coordination across the hierarchy. The Zarf integration consumes peat-mesh via either the broker API or Go SDK to:
 
 - Advertise available packages across the mesh
 - Distribute deployment intents to target nodes
@@ -370,7 +370,7 @@ For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serv
 
 ## Required Code Changes
 
-### eche-mesh crate
+### peat-mesh crate
 
 | Change | Priority | Effort | Description |
 |---|---|---|---|
@@ -385,7 +385,7 @@ For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serv
 
 | Change | Priority | Effort | Description |
 |---|---|---|---|
-| Dockerfile | High | Low | Multi-stage build for eche-mesh binary |
+| Dockerfile | High | Low | Multi-stage build for peat-mesh binary |
 | Helm chart | High | Medium | Parameterized K8s manifests |
 | Iroh relay deployment | Medium | Medium | Relay server at cluster edge |
 | CI/CD pipeline | Medium | Medium | Build + push container images |
@@ -405,7 +405,7 @@ For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serv
 
 **Accepted.** Key decisions resolved:
 
-1. **KubernetesDiscovery lives in eche-mesh** behind the `kubernetes` feature flag (implemented).
+1. **KubernetesDiscovery lives in peat-mesh** behind the `kubernetes` feature flag (implemented).
 2. **Iroh relay**: configurable via `IrohConfig.relay_urls`; self-hosted or public, operator's choice.
 3. **Federation**: Gateway peer pattern first (Option B). Istio multi-cluster as a future option.
 4. **MVP scope**: Phase 1 (library APIs) and Phase 2 (deployment infrastructure) are complete. See implementation status below.
@@ -427,10 +427,10 @@ For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serv
 
 | Component | Status | Location |
 |-----------|--------|----------|
-| `eche-mesh-node` binary | Done | `src/bin/eche-mesh-node.rs` |
+| `peat-mesh-node` binary | Done | `src/bin/peat-mesh-node.rs` |
 | `node` meta-feature | Done | `Cargo.toml` |
 | Dockerfile (multi-stage) | Done | `deploy/Dockerfile` |
-| Helm chart (StatefulSet, headless Service, RBAC) | Done | `deploy/helm/eche-mesh/` |
+| Helm chart (StatefulSet, headless Service, RBAC) | Done | `deploy/helm/peat-mesh/` |
 | Deployment guide | Done | `docs/deployment.md` |
 
 ### Verified
@@ -454,14 +454,14 @@ For Zarf-based deployments using UDS Core (which includes Istio), eche-mesh serv
 
 ### Related ADRs
 
-- [ADR-0002](0002-eche-mesh-extraction.md) - eche-mesh Extraction (architecture and API surface)
+- [ADR-0002](0002-peat-mesh-extraction.md) - peat-mesh Extraction (architecture and API surface)
 - [ADR-0003](0003-peer-discovery-architecture.md) - Peer Discovery Architecture (beacon + DHT tiers)
 - [ADR-0004](0004-pluggable-transport-abstraction.md) - Pluggable Transport Abstraction (PACE, multi-transport)
 - [ADR-0005](0005-e2e-encryption-key-management.md) - E2E Encryption and Key Management
 - [ADR-0006](0006-membership-certificates-tactical-trust.md) - Membership Certificates and Tactical Trust
 - [ADR-0007](0007-consumer-interface-adapters.md) - Consumer Interface Adapters (broker HTTP/WS/TCP)
 - [ADR-0008](0008-zarf-uds-integration.md) - Zarf/UDS Integration for Tactical Software Delivery
-- [ADR-0009](0009-sdk-integration.md) - Eche SDK Integration (Go, Python, Kotlin bindings)
+- [ADR-0009](0009-sdk-integration.md) - Peat SDK Integration (Go, Python, Kotlin bindings)
 
 ### External
 

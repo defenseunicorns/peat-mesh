@@ -36,8 +36,8 @@
 //! # Example
 //!
 //! ```ignore
-//! use eche_mesh::routing::{MeshRouter, MeshRouterConfig, DataPacket};
-//! use eche_mesh::topology::TopologyState;
+//! use peat_mesh::routing::{MeshRouter, MeshRouterConfig, DataPacket};
+//! use peat_mesh::topology::TopologyState;
 //!
 //! // Create mesh router with transport
 //! let router = MeshRouter::new(

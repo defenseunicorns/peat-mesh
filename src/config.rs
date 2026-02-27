@@ -1,4 +1,4 @@
-//! Configuration types for the EcheMesh facade.
+//! Configuration types for the PeatMesh facade.
 
 use crate::topology::TopologyConfig;
 use crate::transport::TransportManagerConfig;
@@ -20,10 +20,10 @@ pub struct IrohConfig {
     pub secret_key: Option<[u8; 32]>,
 }
 
-/// Top-level configuration for EcheMesh.
+/// Top-level configuration for PeatMesh.
 ///
 /// Composes topology, discovery, and security settings into a single
-/// configuration struct that drives the [`crate::mesh::EcheMesh`] facade.
+/// configuration struct that drives the [`crate::mesh::PeatMesh`] facade.
 #[derive(Debug, Clone, Default)]
 pub struct MeshConfig {
     /// Node identifier. Auto-generated (UUID v4) if `None`.
@@ -57,7 +57,7 @@ impl Default for MeshDiscoveryConfig {
     fn default() -> Self {
         Self {
             mdns_enabled: true,
-            service_name: "eche-mesh".to_string(),
+            service_name: "peat-mesh".to_string(),
             interval: Duration::from_secs(30),
         }
     }
@@ -113,7 +113,7 @@ mod tests {
     fn test_mesh_config_default_discovery() {
         let cfg = MeshConfig::default();
         assert!(cfg.discovery.mdns_enabled);
-        assert_eq!(cfg.discovery.service_name, "eche-mesh");
+        assert_eq!(cfg.discovery.service_name, "peat-mesh");
     }
 
     #[test]
@@ -179,7 +179,7 @@ mod tests {
     #[test]
     fn test_discovery_config_default_service_name() {
         let cfg = MeshDiscoveryConfig::default();
-        assert_eq!(cfg.service_name, "eche-mesh");
+        assert_eq!(cfg.service_name, "peat-mesh");
     }
 
     #[test]

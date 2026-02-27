@@ -17,7 +17,7 @@ use std::path::Path;
 /// # Example
 ///
 /// ```ignore
-/// use eche_mesh::security::DeviceKeypair;
+/// use peat_mesh::security::DeviceKeypair;
 ///
 /// // Generate a new keypair
 /// let keypair = DeviceKeypair::generate();
@@ -121,7 +121,7 @@ impl DeviceKeypair {
     ///
     /// This exposes the private key material. Only use for:
     /// - Secure storage/persistence
-    /// - Cross-crate interop (e.g., converting to eche_btle::DeviceIdentity)
+    /// - Cross-crate interop (e.g., converting to peat_btle::DeviceIdentity)
     pub fn secret_key_bytes(&self) -> [u8; 32] {
         self.signing_key.to_bytes()
     }

@@ -44,7 +44,7 @@
 //! ## Usage
 //!
 //! ```ignore
-//! use eche_mesh::storage::ttl::{TtlConfig, EvictionStrategy};
+//! use peat_mesh::storage::ttl::{TtlConfig, EvictionStrategy};
 //! use std::time::Duration;
 //!
 //! // Configure for tactical operations

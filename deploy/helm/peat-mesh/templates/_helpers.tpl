@@ -1,8 +1,8 @@
-{{- define "eche-mesh.name" -}}
+{{- define "peat-mesh.name" -}}
 {{- default .Chart.Name .Values.nameOverride | trunc 63 | trimSuffix "-" }}
 {{- end }}
 
-{{- define "eche-mesh.fullname" -}}
+{{- define "peat-mesh.fullname" -}}
 {{- if .Values.fullnameOverride }}
 {{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
 {{- else }}
@@ -15,23 +15,23 @@
 {{- end }}
 {{- end }}
 
-{{- define "eche-mesh.labels" -}}
-app: eche-mesh
-app.kubernetes.io/name: {{ include "eche-mesh.name" . }}
+{{- define "peat-mesh.labels" -}}
+app: peat-mesh
+app.kubernetes.io/name: {{ include "peat-mesh.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
 app.kubernetes.io/managed-by: {{ .Release.Service }}
 {{- end }}
 
-{{- define "eche-mesh.selectorLabels" -}}
-app: eche-mesh
-app.kubernetes.io/name: {{ include "eche-mesh.name" . }}
+{{- define "peat-mesh.selectorLabels" -}}
+app: peat-mesh
+app.kubernetes.io/name: {{ include "peat-mesh.name" . }}
 app.kubernetes.io/instance: {{ .Release.Name }}
 {{- end }}
 
-{{- define "eche-mesh.serviceAccountName" -}}
+{{- define "peat-mesh.serviceAccountName" -}}
 {{- if .Values.serviceAccount.create }}
-{{- default (include "eche-mesh.fullname" .) .Values.serviceAccount.name }}
+{{- default (include "peat-mesh.fullname" .) .Values.serviceAccount.name }}
 {{- else }}
 {{- default "default" .Values.serviceAccount.name }}
 {{- end }}

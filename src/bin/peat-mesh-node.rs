@@ -1,21 +1,21 @@
-//! eche-mesh-node — Kubernetes-ready mesh node binary.
+//! peat-mesh-node — Kubernetes-ready mesh node binary.
 //!
-//! Reads configuration from environment variables, builds an `EcheMesh`
+//! Reads configuration from environment variables, builds an `PeatMesh`
 //! instance with deterministic keypair and Kubernetes discovery, and
 //! serves the broker HTTP/WS API until SIGTERM/SIGINT.
 
-use eche_mesh::broker::{Broker, BrokerConfig, OtaAppState};
-use eche_mesh::config::{IrohConfig, MeshConfig};
-use eche_mesh::discovery::{KubernetesDiscovery, KubernetesDiscoveryConfig};
-use eche_mesh::mesh::EcheMeshBuilder;
-use eche_mesh::peer_connector::PeerConnector;
-use eche_mesh::qos::{start_periodic_gc, DeletionPolicyRegistry, GarbageCollector, GcConfig};
-use eche_mesh::security::{DeviceKeypair, FormationKey};
-use eche_mesh::storage::{
+use peat_mesh::broker::{Broker, BrokerConfig, OtaAppState};
+use peat_mesh::config::{IrohConfig, MeshConfig};
+use peat_mesh::discovery::{KubernetesDiscovery, KubernetesDiscoveryConfig};
+use peat_mesh::mesh::PeatMeshBuilder;
+use peat_mesh::peer_connector::PeerConnector;
+use peat_mesh::qos::{start_periodic_gc, DeletionPolicyRegistry, GarbageCollector, GcConfig};
+use peat_mesh::security::{DeviceKeypair, FormationKey};
+use peat_mesh::storage::{
     AutomergeStore, AutomergeSyncCoordinator, MeshSyncTransport, NetworkedIrohBlobStore,
     SyncChannelManager, SyncProtocolHandler, SyncTransport, CAP_AUTOMERGE_ALPN,
 };
-use eche_mesh::transport::{
+use peat_mesh::transport::{
     LiteMeshTransport, LiteMessageType, LiteTransportConfig, MeshTransport, OtaSender,
 };
 use std::net::SocketAddr;
@@ -28,8 +28,8 @@ fn main() -> anyhow::Result<()> {
         .install_default()
         .expect("Failed to install rustls crypto provider");
 
-    // Initialize tracing from RUST_LOG (default: info,eche_mesh=debug)
-    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info,eche_mesh=debug".to_string());
+    // Initialize tracing from RUST_LOG (default: info,peat_mesh=debug)
+    let filter = std::env::var("RUST_LOG").unwrap_or_else(|_| "info,peat_mesh=debug".to_string());
     tracing_subscriber::fmt().with_env_filter(filter).init();
 
     tokio::runtime::Builder::new_multi_thread()
@@ -40,22 +40,22 @@ fn main() -> anyhow::Result<()> {
 
 async fn run() -> anyhow::Result<()> {
     // ── Required env vars ────────────────────────────────────────
-    let formation_secret = std::env::var("ECHE_FORMATION_SECRET")
-        .map_err(|_| anyhow::anyhow!("ECHE_FORMATION_SECRET is required"))?;
+    let formation_secret = std::env::var("PEAT_FORMATION_SECRET")
+        .map_err(|_| anyhow::anyhow!("PEAT_FORMATION_SECRET is required"))?;
 
     // ── Optional env vars ────────────────────────────────────────
-    let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "eche-mesh-0".to_string());
+    let hostname = std::env::var("HOSTNAME").unwrap_or_else(|_| "peat-mesh-0".to_string());
     let discovery_mode =
-        std::env::var("ECHE_DISCOVERY").unwrap_or_else(|_| "kubernetes".to_string());
-    let broker_port: u16 = std::env::var("ECHE_BROKER_PORT")
+        std::env::var("PEAT_DISCOVERY").unwrap_or_else(|_| "kubernetes".to_string());
+    let broker_port: u16 = std::env::var("PEAT_BROKER_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(8081);
-    let iroh_bind_port: u16 = std::env::var("ECHE_IROH_BIND_PORT")
+    let iroh_bind_port: u16 = std::env::var("PEAT_IROH_BIND_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(11204);
-    let relay_urls: Vec<String> = std::env::var("ECHE_IROH_RELAY_URLS")
+    let relay_urls: Vec<String> = std::env::var("PEAT_IROH_RELAY_URLS")
         .ok()
         .map(|v| {
             v.split(',')
@@ -70,19 +70,19 @@ async fn run() -> anyhow::Result<()> {
         discovery = %discovery_mode,
         broker_port = broker_port,
         iroh_bind_port = iroh_bind_port,
-        "Starting eche-mesh-node"
+        "Starting peat-mesh-node"
     );
 
     // ── Formation key ────────────────────────────────────────────
-    let formation_key = FormationKey::from_base64("eche", &formation_secret)
-        .map_err(|e| anyhow::anyhow!("Invalid ECHE_FORMATION_SECRET: {}", e))?;
+    let formation_key = FormationKey::from_base64("peat", &formation_secret)
+        .map_err(|e| anyhow::anyhow!("Invalid PEAT_FORMATION_SECRET: {}", e))?;
 
     // ── Deterministic keypair from formation secret + hostname ───
     let seed = base64::Engine::decode(
         &base64::engine::general_purpose::STANDARD,
         formation_secret.trim(),
     )
-    .map_err(|e| anyhow::anyhow!("Invalid base64 in ECHE_FORMATION_SECRET: {}", e))?;
+    .map_err(|e| anyhow::anyhow!("Invalid base64 in PEAT_FORMATION_SECRET: {}", e))?;
 
     // ── Derive deterministic Iroh secret key ─────────────────────
     let iroh_key = {
@@ -107,7 +107,7 @@ async fn run() -> anyhow::Result<()> {
     };
 
     // ── Discovery strategy ───────────────────────────────────────
-    let mut discovery: Box<dyn eche_mesh::discovery::DiscoveryStrategy> =
+    let mut discovery: Box<dyn peat_mesh::discovery::DiscoveryStrategy> =
         match discovery_mode.as_str() {
             "kubernetes" | "k8s" => {
                 info!("Using Kubernetes EndpointSlice discovery");
@@ -118,12 +118,12 @@ async fn run() -> anyhow::Result<()> {
             "mdns" => {
                 info!("Using mDNS discovery");
                 Box::new(
-                    eche_mesh::discovery::MdnsDiscovery::new()
+                    peat_mesh::discovery::MdnsDiscovery::new()
                         .map_err(|e| anyhow::anyhow!("mDNS discovery init failed: {}", e))?,
                 )
             }
             other => {
-                anyhow::bail!("Unknown ECHE_DISCOVERY mode: {}", other);
+                anyhow::bail!("Unknown PEAT_DISCOVERY mode: {}", other);
             }
         };
 
@@ -150,7 +150,7 @@ async fn run() -> anyhow::Result<()> {
     );
 
     // ── Automerge document store ────────────────────────────────
-    let data_dir = std::env::var("ECHE_DATA_DIR").unwrap_or_else(|_| "/data".to_string());
+    let data_dir = std::env::var("PEAT_DATA_DIR").unwrap_or_else(|_| "/data".to_string());
     let automerge_store = Arc::new(
         AutomergeStore::open(format!("{}/automerge", data_dir))
             .map_err(|e| anyhow::anyhow!("Failed to open AutomergeStore: {}", e))?,
@@ -186,7 +186,7 @@ async fn run() -> anyhow::Result<()> {
     let sync_handler = SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
 
     // ── Create networked blob store with sync protocol ──────────
-    let blob_dir = std::env::temp_dir().join(format!("eche_iroh_blobs_{}", hostname));
+    let blob_dir = std::env::temp_dir().join(format!("peat_iroh_blobs_{}", hostname));
     let blob_store = NetworkedIrohBlobStore::from_endpoint_with_protocols(
         blob_dir,
         endpoint,
@@ -202,7 +202,7 @@ async fn run() -> anyhow::Result<()> {
     );
 
     // ── Build mesh ───────────────────────────────────────────────
-    let mesh = EcheMeshBuilder::new(mesh_config)
+    let mesh = PeatMeshBuilder::new(mesh_config)
         .with_device_keypair_from_seed(&seed, &hostname)
         .map_err(|e| anyhow::anyhow!("Keypair derivation failed: {}", e))?
         .with_formation_key(formation_key)
@@ -263,7 +263,7 @@ async fn run() -> anyhow::Result<()> {
     };
 
     // ── Peat-Lite transport + OTA sender ───────────────────────────
-    let lite_port: u16 = std::env::var("ECHE_LITE_PORT")
+    let lite_port: u16 = std::env::var("PEAT_LITE_PORT")
         .ok()
         .and_then(|v| v.parse().ok())
         .unwrap_or(5555);
@@ -294,7 +294,7 @@ async fn run() -> anyhow::Result<()> {
     }
 
     // Derive OTA signing keypair from formation secret
-    let ota_keypair = DeviceKeypair::from_seed(&seed, "eche-ota-signing-v1")
+    let ota_keypair = DeviceKeypair::from_seed(&seed, "peat-ota-signing-v1")
         .map_err(|e| anyhow::anyhow!("OTA keypair derivation failed: {}", e))?;
     info!(
         ota_signing_pubkey = %hex::encode(ota_keypair.public_key_bytes()),
@@ -351,9 +351,9 @@ async fn run() -> anyhow::Result<()> {
         bind_addr: SocketAddr::from(([0, 0, 0, 0], broker_port)),
         ..Default::default()
     };
-    let store_adapter = eche_mesh::broker::StoreBrokerAdapter::new(automerge_store.clone());
-    let composite_state = Arc::new(eche_mesh::broker::CompositeBrokerState::new(
-        mesh.clone() as Arc<dyn eche_mesh::broker::state::MeshBrokerState>,
+    let store_adapter = peat_mesh::broker::StoreBrokerAdapter::new(automerge_store.clone());
+    let composite_state = Arc::new(peat_mesh::broker::CompositeBrokerState::new(
+        mesh.clone() as Arc<dyn peat_mesh::broker::state::MeshBrokerState>,
         store_adapter,
     ));
 
@@ -361,7 +361,7 @@ async fn run() -> anyhow::Result<()> {
         sender: ota_sender.clone(),
     });
 
-    let broker = Broker::new(composite_state as Arc<dyn eche_mesh::broker::state::MeshBrokerState>)
+    let broker = Broker::new(composite_state as Arc<dyn peat_mesh::broker::state::MeshBrokerState>)
         .with_config(broker_config);
     let router = broker.build_router_with_ota(ota_app_state);
 
@@ -392,7 +392,7 @@ async fn run() -> anyhow::Result<()> {
     if let Err(e) = mesh_ref.stop() {
         error!("Error stopping mesh: {}", e);
     }
-    info!("eche-mesh-node stopped");
+    info!("peat-mesh-node stopped");
 
     Ok(())
 }

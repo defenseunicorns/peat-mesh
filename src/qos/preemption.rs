@@ -22,7 +22,7 @@
 //! # Example
 //!
 //! ```
-//! use eche_mesh::qos::{QoSClass, PreemptionController, ActiveTransfer};
+//! use peat_mesh::qos::{QoSClass, PreemptionController, ActiveTransfer};
 //! use uuid::Uuid;
 //!
 //! # async fn example() {

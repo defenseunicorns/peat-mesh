@@ -1,7 +1,7 @@
 replicaCount: 3
 
 image:
-  repository: eche-mesh-node
+  repository: peat-mesh-node
   tag: latest
   pullPolicy: IfNotPresent
 
@@ -21,7 +21,7 @@ irohBindPort: 11204
 irohRelayUrls: ""
 
 # RUST_LOG filter
-rustLog: "info,eche_mesh=debug"
+rustLog: "info,peat_mesh=debug"
 
 serviceAccount:
   create: true
