@@ -19,9 +19,9 @@ use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tracing::{debug, error, info, warn};
 
-// Re-export OTA constants from peat-lite-protocol (single source of truth)
-use peat_lite_protocol::ota::{OTA_ABORT_TOO_MANY_RETRIES, OTA_RESULT_SUCCESS};
-pub use peat_lite_protocol::ota::{OTA_CHUNK_DATA_SIZE, OTA_FLAG_SIGNED};
+// Re-export OTA constants from peat-lite (single source of truth)
+use peat_lite::ota::{OTA_ABORT_TOO_MANY_RETRIES, OTA_RESULT_SUCCESS};
+pub use peat_lite::ota::{OTA_CHUNK_DATA_SIZE, OTA_FLAG_SIGNED};
 
 /// Timeout before retransmitting a chunk
 const CHUNK_TIMEOUT: Duration = Duration::from_millis(500);
