@@ -94,9 +94,8 @@ impl MeshSyncTransport {
                         );
                         let coord = coordinator.clone();
                         tokio::spawn(async move {
-                            if let Err(e) = coord
-                                .handle_incoming_sync_stream(peer_id, send, recv)
-                                .await
+                            if let Err(e) =
+                                coord.handle_incoming_sync_stream(peer_id, send, recv).await
                             {
                                 warn!(
                                     peer = %peer_id.fmt_short(),
