@@ -66,6 +66,65 @@ impl MeshSyncTransport {
         conns.remove(peer_id);
     }
 
+    /// Start full-duplex sync on a connection.
+    ///
+    /// Stores the connection and spawns a background task that accepts
+    /// incoming bidirectional streams, forwarding each to the sync
+    /// coordinator. This makes the QUIC connection fully bidirectional
+    /// for sync — both sides can initiate streams.
+    ///
+    /// Use this for **both** incoming connections (from `SyncProtocolHandler`)
+    /// and outgoing connections (from `connect_peer` or discovery).
+    pub fn start_sync_connection(
+        self: &Arc<Self>,
+        connection: Connection,
+        coordinator: Arc<AutomergeSyncCoordinator>,
+    ) {
+        let peer_id = connection.remote_id();
+        self.insert_connection(peer_id, connection.clone());
+
+        let transport = Arc::clone(self);
+        tokio::spawn(async move {
+            loop {
+                match connection.accept_bi().await {
+                    Ok((send, recv)) => {
+                        debug!(
+                            peer = %peer_id.fmt_short(),
+                            "Accepted incoming sync stream"
+                        );
+                        let coord = coordinator.clone();
+                        tokio::spawn(async move {
+                            if let Err(e) =
+                                coord.handle_incoming_sync_stream(peer_id, send, recv).await
+                            {
+                                warn!(
+                                    peer = %peer_id.fmt_short(),
+                                    error = %e,
+                                    "Error handling incoming sync stream"
+                                );
+                            }
+                        });
+                    }
+                    Err(e) => {
+                        debug!(
+                            peer = %peer_id.fmt_short(),
+                            error = %e,
+                            "Sync connection closed"
+                        );
+                        break;
+                    }
+                }
+            }
+
+            transport.remove_connection(&peer_id);
+            coordinator.clear_peer_sync_state(peer_id);
+            info!(
+                peer = %peer_id.fmt_short(),
+                "Cleaned up sync state for disconnected peer"
+            );
+        });
+    }
+
     /// Get a reference to the underlying Iroh endpoint.
     pub fn endpoint(&self) -> &Endpoint {
         &self.endpoint
@@ -94,12 +153,9 @@ impl SyncTransport for MeshSyncTransport {
 /// Iroh Router protocol handler for `CAP_AUTOMERGE_ALPN`.
 ///
 /// When the Router receives a QUIC connection with our ALPN, it calls
-/// [`accept`](iroh::protocol::ProtocolHandler::accept), which:
-///
-/// 1. Stores the connection in [`MeshSyncTransport`].
-/// 2. Enters a loop accepting bidirectional streams and forwarding each to
-///    [`AutomergeSyncCoordinator::handle_incoming_sync_stream`].
-/// 3. On connection close, cleans up peer state.
+/// [`accept`](iroh::protocol::ProtocolHandler::accept), which delegates to
+/// [`MeshSyncTransport::start_sync_connection`] to set up full-duplex
+/// sync on the connection.
 pub struct SyncProtocolHandler {
     transport: Arc<MeshSyncTransport>,
     coordinator: Arc<AutomergeSyncCoordinator>,
@@ -126,60 +182,16 @@ impl SyncProtocolHandler {
 impl iroh::protocol::ProtocolHandler for SyncProtocolHandler {
     /// Handle an incoming QUIC connection on the `CAP_AUTOMERGE_ALPN` ALPN.
     ///
-    /// Runs on a dedicated tokio task (spawned by the Router), so it may be
-    /// long-running.
+    /// Delegates to [`MeshSyncTransport::start_sync_connection`] which stores
+    /// the connection and spawns a full-duplex accept loop for sync streams.
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
-        let peer_id = connection.remote_id();
-
         info!(
-            peer = %peer_id.fmt_short(),
+            peer = %connection.remote_id().fmt_short(),
             "Accepted incoming sync connection"
         );
 
-        // Store connection so outbound sync can reuse it.
         self.transport
-            .insert_connection(peer_id, connection.clone());
-
-        // Accept bidirectional streams until the connection closes.
-        loop {
-            match connection.accept_bi().await {
-                Ok((send, recv)) => {
-                    debug!(
-                        peer = %peer_id.fmt_short(),
-                        "Accepted incoming sync stream"
-                    );
-                    let coordinator = self.coordinator.clone();
-                    tokio::spawn(async move {
-                        if let Err(e) = coordinator
-                            .handle_incoming_sync_stream(peer_id, send, recv)
-                            .await
-                        {
-                            warn!(
-                                peer = %peer_id.fmt_short(),
-                                error = %e,
-                                "Error handling incoming sync stream"
-                            );
-                        }
-                    });
-                }
-                Err(e) => {
-                    debug!(
-                        peer = %peer_id.fmt_short(),
-                        error = %e,
-                        "Sync connection closed"
-                    );
-                    break;
-                }
-            }
-        }
-
-        // Clean up.
-        self.transport.remove_connection(&peer_id);
-        self.coordinator.clear_peer_sync_state(peer_id);
-        info!(
-            peer = %peer_id.fmt_short(),
-            "Cleaned up sync state for disconnected peer"
-        );
+            .start_sync_connection(connection, self.coordinator.clone());
 
         Ok(())
     }
