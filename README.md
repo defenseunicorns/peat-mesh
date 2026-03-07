@@ -11,7 +11,7 @@ peat-mesh provides the core mesh networking layer for the Peat protocol, includi
 - **Discovery** - mDNS and static peer discovery with hybrid strategies
 - **Topology** - Dynamic topology management with partition detection and autonomous operation
 - **Routing** - Mesh routing with data aggregation and deduplication
-- **Storage** - Automerge CRDT backend with Iroh P2P sync, negentropy set reconciliation, and redb persistence
+- **Storage** - Automerge CRDT backend with Iroh P2P sync, negentropy set reconciliation, redb persistence, and streaming large-blob transfer
 - **Beacon** - Geographic beacon broadcasting and observation with geohash indexing
 - **QoS** - Bandwidth management, TTL, retention policies, sync modes, and garbage collection
 - **Broker** - Optional HTTP/WebSocket service broker (Axum-based)
@@ -20,7 +20,7 @@ peat-mesh provides the core mesh networking layer for the Peat protocol, includi
 
 ```toml
 [dependencies]
-peat-mesh = "0.1.0"
+peat-mesh = "0.3.2"
 ```
 
 ### Feature flags
@@ -55,6 +55,27 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 ```
+
+## Streaming Transfer
+
+peat-mesh includes a streaming large-blob transfer module for bounded-memory file transfer across DDIL links. Transfers use O(chunk_size) memory regardless of blob size, with incremental SHA256 verification and resumable sessions via periodic checkpointing.
+
+```rust
+use peat_mesh::storage::{StreamingTransferConfig, TransferCheckpoint};
+
+// Pre-built profiles for different network conditions
+let config = StreamingTransferConfig::tactical(); // 256 KiB chunks, 30s checkpoint interval
+// Also available: StreamingTransferConfig::datacenter() and ::edge()
+
+// Resume from a previous checkpoint
+let checkpoint = TransferCheckpoint::load("transfer-session.json")?;
+```
+
+| Profile | Chunk Size | Checkpoint Interval | Use Case |
+|---------|-----------|-------------------|----------|
+| `datacenter()` | 1 MiB | 60s | High-bandwidth, reliable links |
+| `tactical()` | 256 KiB | 30s | Intermittent tactical networks |
+| `edge()` | 64 KiB | 10s | Low-bandwidth edge/BTLE links |
 
 ## Kubernetes Deployment
 
