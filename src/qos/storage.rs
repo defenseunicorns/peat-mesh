@@ -479,17 +479,27 @@ impl QoSAwareStorage {
 
     /// Get count of tracked documents
     pub fn document_count(&self) -> usize {
-        self.documents.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.documents
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Check if a document exists
     pub fn contains(&self, doc_id: &str) -> bool {
-        self.documents.read().unwrap_or_else(|e| e.into_inner()).contains_key(doc_id)
+        self.documents
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(doc_id)
     }
 
     /// Get document info (read-only)
     pub fn get_document(&self, doc_id: &str) -> Option<StoredDocument> {
-        self.documents.read().unwrap_or_else(|e| e.into_inner()).get(doc_id).cloned()
+        self.documents
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(doc_id)
+            .cloned()
     }
 
     /// Get max storage capacity

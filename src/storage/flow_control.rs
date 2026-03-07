@@ -482,7 +482,10 @@ impl FlowController {
     ) -> Result<(), FlowControlError> {
         // 1. Check rate limit
         {
-            let mut limiters = self.rate_limiters.write().unwrap_or_else(|e| e.into_inner());
+            let mut limiters = self
+                .rate_limiters
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let limiter = limiters.entry(*peer_id).or_insert_with(|| {
                 TokenBucket::new(
                     self.config.max_messages_per_second,

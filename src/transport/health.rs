@@ -268,7 +268,10 @@ impl HealthMonitor {
 
     /// Subscribe to health events (degradation, failure)
     pub fn subscribe(&self, sender: PeerEventSender) {
-        self.event_senders.write().unwrap_or_else(|e| e.into_inner()).push(sender);
+        self.event_senders
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(sender);
     }
 
     /// Get peers that need a heartbeat ping
@@ -447,7 +450,10 @@ impl HealthMonitor {
 
     /// Emit an event to all subscribers
     fn emit_event(&self, event: PeerEvent) {
-        let mut senders = self.event_senders.write().unwrap_or_else(|e| e.into_inner());
+        let mut senders = self
+            .event_senders
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         senders.retain(|sender| match sender.try_send(event.clone()) {
             Ok(()) => true,
             Err(mpsc::error::TrySendError::Full(_)) => {
@@ -465,7 +471,10 @@ impl HealthMonitor {
 
     /// Clear all monitoring state
     pub fn clear(&self) {
-        self.health.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.health
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }
 

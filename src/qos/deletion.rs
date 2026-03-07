@@ -828,7 +828,10 @@ impl DeletionPolicyRegistry {
         ];
 
         {
-            let mut overrides = registry.overrides.write().unwrap_or_else(|e| e.into_inner());
+            let mut overrides = registry
+                .overrides
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             for (collection, policy) in defaults {
                 overrides.insert(collection.to_string(), policy);
             }
@@ -857,7 +860,10 @@ impl DeletionPolicyRegistry {
 
     /// Remove a collection override (will use default)
     pub fn remove(&self, collection: &str) -> Option<DeletionPolicy> {
-        self.overrides.write().unwrap_or_else(|e| e.into_inner()).remove(collection)
+        self.overrides
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(collection)
     }
 
     /// Check if deletion is allowed for a collection
@@ -879,7 +885,12 @@ impl DeletionPolicyRegistry {
 impl Clone for DeletionPolicyRegistry {
     fn clone(&self) -> Self {
         Self {
-            overrides: RwLock::new(self.overrides.read().unwrap_or_else(|e| e.into_inner()).clone()),
+            overrides: RwLock::new(
+                self.overrides
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            ),
         }
     }
 }

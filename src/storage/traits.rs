@@ -330,16 +330,27 @@ mod tests {
 
     impl Collection for InMemCollection {
         fn upsert(&self, doc_id: &str, data: Vec<u8>) -> Result<()> {
-            self.data.write().unwrap_or_else(|e| e.into_inner()).insert(doc_id.to_string(), data);
+            self.data
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(doc_id.to_string(), data);
             Ok(())
         }
 
         fn get(&self, doc_id: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.data.read().unwrap_or_else(|e| e.into_inner()).get(doc_id).cloned())
+            Ok(self
+                .data
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(doc_id)
+                .cloned())
         }
 
         fn delete(&self, doc_id: &str) -> Result<()> {
-            self.data.write().unwrap_or_else(|e| e.into_inner()).remove(doc_id);
+            self.data
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(doc_id);
             Ok(())
         }
 
@@ -489,7 +500,12 @@ mod tests {
         }
 
         fn list_collections(&self) -> Vec<String> {
-            self.collections.read().unwrap_or_else(|e| e.into_inner()).keys().cloned().collect()
+            self.collections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .keys()
+                .cloned()
+                .collect()
         }
 
         fn flush(&self) -> Result<()> {

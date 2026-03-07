@@ -599,7 +599,11 @@ impl SyncChannelManager {
     /// Remove channel for a peer (e.g., on disconnect)
     pub async fn remove_channel(&self, peer_id: &EndpointId) {
         // Extract channel from map first, then close outside the lock
-        let channel = self.channels.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
+        let channel = self
+            .channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
         if let Some(channel) = channel {
             channel.close().await;
         }
@@ -607,7 +611,10 @@ impl SyncChannelManager {
 
     /// Get number of active channels
     pub fn channel_count(&self) -> usize {
-        self.channels.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Get statistics for all channels

@@ -244,12 +244,19 @@ impl PartitionDetector {
 
     /// Register a new peer for heartbeat tracking
     pub fn register_peer(&self, peer_id: EndpointId) {
-        self.heartbeats.write().unwrap_or_else(|e| e.into_inner()).entry(peer_id).or_default();
+        self.heartbeats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(peer_id)
+            .or_default();
     }
 
     /// Remove a peer from heartbeat tracking
     pub fn unregister_peer(&self, peer_id: &EndpointId) {
-        self.heartbeats.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
+        self.heartbeats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 
     /// Record a successful heartbeat for a peer
@@ -285,7 +292,11 @@ impl PartitionDetector {
 
     /// Get heartbeat info for a peer
     pub fn get_peer_heartbeat(&self, peer_id: &EndpointId) -> Option<PeerHeartbeat> {
-        self.heartbeats.read().unwrap_or_else(|e| e.into_inner()).get(peer_id).cloned()
+        self.heartbeats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Get all partitioned peers
@@ -331,7 +342,10 @@ impl PartitionDetector {
 
     /// Get number of tracked peers
     pub fn peer_count(&self) -> usize {
-        self.heartbeats.read().unwrap_or_else(|e| e.into_inner()).len()
+        self.heartbeats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 

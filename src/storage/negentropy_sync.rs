@@ -361,12 +361,18 @@ impl NegentropySync {
 
     /// Check if there's an active session with a peer
     pub fn has_session(&self, peer_id: &EndpointId) -> bool {
-        self.sessions.read().unwrap_or_else(|e| e.into_inner()).contains_key(peer_id)
+        self.sessions
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(peer_id)
     }
 
     /// Cancel a sync session
     pub fn cancel_session(&self, peer_id: &EndpointId) {
-        self.sessions.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
+        self.sessions
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 }
 

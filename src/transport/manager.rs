@@ -320,7 +320,10 @@ impl TransportManager {
         &self,
         id: &TransportId,
     ) -> Option<(TransportInstance, Arc<dyn Transport>)> {
-        self.transport_instances.write().unwrap_or_else(|e| e.into_inner()).remove(id)
+        self.transport_instances
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(id)
     }
 
     /// Get a transport instance by ID
@@ -409,7 +412,10 @@ impl TransportManager {
             None => return Vec::new(), // No PACE policy configured
         };
 
-        let instances = self.transport_instances.read().unwrap_or_else(|e| e.into_inner());
+        let instances = self
+            .transport_instances
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let available_for_peer: HashSet<_> = instances
             .iter()
             .filter(|(_, (inst, transport))| {
@@ -469,7 +475,10 @@ impl TransportManager {
 
     /// Clear cached transport for a peer (PACE version)
     pub fn clear_cache_pace(&self, peer_id: &NodeId) {
-        self.peer_transport_ids.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
+        self.peer_transport_ids
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 
     /// Select the best transport for a peer and message requirements
@@ -494,7 +503,12 @@ impl TransportManager {
     ) -> Option<TransportType> {
         // Check cache first if enabled
         if self.config.cache_peer_transport {
-            if let Some(&cached) = self.peer_transports.read().unwrap_or_else(|e| e.into_inner()).get(peer_id) {
+            if let Some(&cached) = self
+                .peer_transports
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(peer_id)
+            {
                 // Verify cached transport still valid
                 if let Some(transport) = self.transports.get(&cached) {
                     if transport.is_available()
@@ -596,7 +610,10 @@ impl TransportManager {
     ///
     /// Call this when a transport fails for a peer.
     pub fn clear_cache(&self, peer_id: &NodeId) {
-        self.peer_transports.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
+        self.peer_transports
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 
     /// Update distance estimate for a peer
@@ -609,7 +626,11 @@ impl TransportManager {
 
     /// Get current distance estimate for a peer
     pub fn get_peer_distance(&self, peer_id: &NodeId) -> Option<PeerDistance> {
-        self.peer_distances.read().unwrap_or_else(|e| e.into_inner()).get(peer_id).cloned()
+        self.peer_distances
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Connect to a peer using the best available transport
@@ -910,7 +931,10 @@ impl TransportManager {
     ) -> Option<TransportId> {
         let policy = policy_override.or(self.config.default_policy.as_ref())?;
 
-        let instances = self.transport_instances.read().unwrap_or_else(|e| e.into_inner());
+        let instances = self
+            .transport_instances
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let available_for_peer: HashSet<_> = instances
             .iter()
             .filter(|(_, (inst, transport))| {
@@ -2270,7 +2294,10 @@ mod tests {
         let peer = NodeId::new("peer-1".to_string());
         manager.record_success_pace(&peer, "iroh-eth0".to_string());
 
-        let cached = manager.peer_transport_ids.read().unwrap_or_else(|e| e.into_inner());
+        let cached = manager
+            .peer_transport_ids
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         assert_eq!(cached.get(&peer), Some(&"iroh-eth0".to_string()));
     }
 
@@ -2285,7 +2312,10 @@ mod tests {
         let peer = NodeId::new("peer-1".to_string());
         manager.record_success_pace(&peer, "iroh-eth0".to_string());
 
-        let cached = manager.peer_transport_ids.read().unwrap_or_else(|e| e.into_inner());
+        let cached = manager
+            .peer_transport_ids
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         assert!(cached.get(&peer).is_none());
     }
 
@@ -2661,7 +2691,10 @@ mod tests {
         manager.record_success(&peer, TransportType::Quic);
 
         // Cache should be empty since caching is disabled
-        let cached = manager.peer_transports.read().unwrap_or_else(|e| e.into_inner());
+        let cached = manager
+            .peer_transports
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         assert!(cached.get(&peer).is_none());
     }
 

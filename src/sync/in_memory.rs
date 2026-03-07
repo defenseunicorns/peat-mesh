@@ -343,7 +343,10 @@ impl DocumentStore for InMemoryBackend {
             sender: tx,
         };
 
-        self.observers.lock().unwrap_or_else(|e| e.into_inner()).push(entry);
+        self.observers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(entry);
 
         Ok(ChangeStream { receiver: rx })
     }
@@ -479,7 +482,10 @@ impl PeerDiscovery for InMemoryBackend {
         peers.insert(peer_id, info.clone());
 
         // Notify callbacks
-        let callbacks = self.peer_callbacks.lock().unwrap_or_else(|e| e.into_inner());
+        let callbacks = self
+            .peer_callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         for cb in callbacks.iter() {
             cb(PeerEvent::Connected(info.clone()));
         }
@@ -508,7 +514,10 @@ impl PeerDiscovery for InMemoryBackend {
     }
 
     fn on_peer_event(&self, callback: Box<dyn Fn(PeerEvent) + Send + Sync>) {
-        let mut callbacks = self.peer_callbacks.lock().unwrap_or_else(|e| e.into_inner());
+        let mut callbacks = self
+            .peer_callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         callbacks.push(callback);
     }
 

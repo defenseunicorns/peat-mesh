@@ -610,7 +610,10 @@ impl AutomergeSyncCoordinator {
     /// This enables routing all sync operations through persistent channels
     /// instead of opening new streams for each operation.
     pub fn set_channel_manager(&self, manager: Arc<super::sync_channel::SyncChannelManager>) {
-        *self.channel_manager.write().unwrap_or_else(|e| e.into_inner()) = Some(Arc::downgrade(&manager));
+        *self
+            .channel_manager
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(Arc::downgrade(&manager));
     }
 
     /// Get the channel manager if available
@@ -2553,12 +2556,19 @@ impl AutomergeSyncCoordinator {
 
     /// Get statistics for a specific peer
     pub fn peer_stats(&self, peer_id: &EndpointId) -> Option<PeerSyncStats> {
-        self.peer_stats.read().unwrap_or_else(|e| e.into_inner()).get(peer_id).cloned()
+        self.peer_stats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Get statistics for all peers
     pub fn all_peer_stats(&self) -> HashMap<EndpointId, PeerSyncStats> {
-        self.peer_stats.read().unwrap_or_else(|e| e.into_inner()).clone()
+        self.peer_stats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Get reference to the error handler for diagnostics

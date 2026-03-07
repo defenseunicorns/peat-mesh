@@ -651,12 +651,18 @@ impl ReplayTracker {
 
     /// Clear tracking for a source
     pub fn clear_source(&self, source: &IpAddr) {
-        self.windows.write().unwrap_or_else(|e| e.into_inner()).remove(source);
+        self.windows
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(source);
     }
 
     /// Clear all tracking
     pub fn clear_all(&self) {
-        self.windows.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.windows
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 }
 
@@ -1063,7 +1069,10 @@ impl UdpBypassChannel {
     pub fn stop(&mut self) {
         self.running.store(false, Ordering::SeqCst);
         self.socket = None;
-        self.multicast_sockets.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.multicast_sockets
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
         info!("Bypass channel stopped");
     }
 
@@ -1175,7 +1184,10 @@ impl UdpBypassChannel {
     async fn get_or_create_multicast(&self, group: IpAddr) -> Result<Arc<UdpSocket>> {
         // Check if already exists
         {
-            let sockets = self.multicast_sockets.read().unwrap_or_else(|e| e.into_inner());
+            let sockets = self
+                .multicast_sockets
+                .read()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(socket) = sockets.get(&group) {
                 return Ok(socket.clone());
             }
@@ -1206,7 +1218,12 @@ impl UdpBypassChannel {
 
     /// Leave a multicast group
     pub fn leave_multicast(&self, group: IpAddr) -> Result<()> {
-        if let Some(socket) = self.multicast_sockets.write().unwrap_or_else(|e| e.into_inner()).remove(&group) {
+        if let Some(socket) = self
+            .multicast_sockets
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(&group)
+        {
             match group {
                 IpAddr::V4(addr) => {
                     // Note: socket drop will leave the group, but explicit leave is cleaner

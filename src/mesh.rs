@@ -1394,7 +1394,11 @@ mod tests {
     #[test]
     fn test_discovery_initially_none() {
         let mesh = PeatMesh::new(MeshConfig::default());
-        assert!(mesh.discovery().read().unwrap_or_else(|e| e.into_inner()).is_none());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
     }
 
     #[test]
@@ -1402,7 +1406,11 @@ mod tests {
         let mesh = PeatMesh::new(MeshConfig::default());
         let strategy = crate::discovery::HybridDiscovery::new();
         mesh.set_discovery(Box::new(strategy));
-        assert!(mesh.discovery().read().unwrap_or_else(|e| e.into_inner()).is_some());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
     }
 
     #[test]
@@ -1411,7 +1419,11 @@ mod tests {
         let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_discovery(Box::new(strategy))
             .build();
-        assert!(mesh.discovery().read().unwrap_or_else(|e| e.into_inner()).is_some());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
     }
 
     // ── Gap 2: Beacon system ───────────────────────────────────────

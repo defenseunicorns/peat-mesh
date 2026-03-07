@@ -591,7 +591,10 @@ impl LiteMeshTransport {
     where
         F: Fn(&QueryRequest) -> Option<Vec<u8>> + Send + Sync + 'static,
     {
-        let mut cb = self.query_callback.lock().unwrap_or_else(|e| e.into_inner());
+        let mut cb = self
+            .query_callback
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *cb = Some(Box::new(callback));
     }
 
@@ -736,7 +739,12 @@ impl LiteMeshTransport {
                         );
 
                         // Call CRDT callback if set
-                        if let Some(callback) = self.crdt_callback.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                        if let Some(callback) = self
+                            .crdt_callback
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .as_ref()
+                        {
                             // Use node_id as doc_id, "lite_sensors" as collection
                             callback("lite_sensors", &node_id_str, crdt_type, crdt_data);
                         }
@@ -765,7 +773,12 @@ impl LiteMeshTransport {
                         request.collection,
                     );
 
-                    if let Some(callback) = self.query_callback.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                    if let Some(callback) = self
+                        .query_callback
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .as_ref()
+                    {
                         if let Some(_response) = callback(&request) {
                             // Response would be sent back via send_to in a real async context.
                             // For now, the callback handles the response externally.
@@ -780,7 +793,12 @@ impl LiteMeshTransport {
             | MessageType::OtaResult
             | MessageType::OtaAbort => {
                 log::debug!("OTA message {:?} from {}", msg.msg_type, node_id_str);
-                if let Some(callback) = self.ota_callback.lock().unwrap_or_else(|e| e.into_inner()).as_ref() {
+                if let Some(callback) = self
+                    .ota_callback
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .as_ref()
+                {
                     callback(&node_id_str, msg.msg_type, &msg.payload);
                 }
             }
@@ -1009,7 +1027,10 @@ impl MeshTransport for LiteMeshTransport {
 
     fn subscribe_peer_events(&self) -> PeerEventReceiver {
         let (tx, rx) = mpsc::channel(PEER_EVENT_CHANNEL_CAPACITY);
-        self.event_senders.lock().unwrap_or_else(|e| e.into_inner()).push(tx);
+        self.event_senders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(tx);
         rx
     }
 

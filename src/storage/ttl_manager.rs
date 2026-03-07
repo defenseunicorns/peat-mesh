@@ -217,7 +217,12 @@ impl TtlManager {
 
     /// Stop background cleanup task
     pub fn stop_background_cleanup(&self) {
-        if let Some(handle) = self.cleanup_task.write().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Some(handle) = self
+            .cleanup_task
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             handle.abort();
         }
     }

@@ -330,7 +330,12 @@ impl TopologyBuilder {
 
     /// Stop topology formation
     pub async fn stop(&self) {
-        if let Some(handle) = self.task_handle.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        if let Some(handle) = self
+            .task_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             handle.abort();
         }
     }
@@ -342,7 +347,11 @@ impl TopologyBuilder {
 
     /// Get current selected peer
     pub fn get_selected_peer(&self) -> Option<SelectedPeer> {
-        self.state.lock().unwrap_or_else(|e| e.into_inner()).selected_peer.clone()
+        self.state
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .selected_peer
+            .clone()
     }
 
     /// Get topology configuration
@@ -354,7 +363,10 @@ impl TopologyBuilder {
     ///
     /// Can only be called once. Returns None if already taken.
     pub fn subscribe(&self) -> Option<mpsc::UnboundedReceiver<TopologyEvent>> {
-        self.event_rx.lock().unwrap_or_else(|e| e.into_inner()).take()
+        self.event_rx
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
     }
 
     /// Update node position (for mobile nodes)
@@ -834,11 +846,19 @@ mod tests {
         // Start, then stop
         builder.start().await;
         // task_handle should be set
-        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_some());
+        assert!(builder
+            .task_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
 
         builder.stop().await;
         // task_handle should be taken (None)
-        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_none());
+        assert!(builder
+            .task_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
     }
 
     #[tokio::test]
@@ -858,7 +878,11 @@ mod tests {
         builder.start().await;
         // Calling start a second time should be a no-op (not spawn a second task)
         builder.start().await;
-        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_some());
+        assert!(builder
+            .task_handle
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
 
         builder.stop().await;
     }

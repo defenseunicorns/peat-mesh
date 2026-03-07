@@ -265,7 +265,12 @@ impl EvictionAuditLog {
 
     /// Get all entries (clone)
     pub fn get_all(&self) -> Vec<AuditEntry> {
-        self.entries.read().unwrap_or_else(|e| e.into_inner()).iter().cloned().collect()
+        self.entries
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Get entries within a time range
@@ -322,12 +327,18 @@ impl EvictionAuditLog {
 
     /// Check if log is empty
     pub fn is_empty(&self) -> bool {
-        self.entries.read().unwrap_or_else(|e| e.into_inner()).is_empty()
+        self.entries
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
     }
 
     /// Clear all entries
     pub fn clear(&self) {
-        self.entries.write().unwrap_or_else(|e| e.into_inner()).clear();
+        self.entries
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     /// Get summary statistics

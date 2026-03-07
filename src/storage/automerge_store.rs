@@ -275,7 +275,10 @@ impl AutomergeStore {
             write_txn.commit().context("Failed to commit delete")?;
         }
 
-        self.cache.write().unwrap_or_else(|e| e.into_inner()).pop(key);
+        self.cache
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop(key);
         Ok(())
     }
 
