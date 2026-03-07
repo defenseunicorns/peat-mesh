@@ -247,7 +247,7 @@ impl InMemoryBackend {
 
     /// Notify observers about a change
     fn notify_observers(&self, collection: &str, event: ChangeEvent) {
-        let observers = self.observers.lock().unwrap();
+        let observers = self.observers.lock().unwrap_or_else(|e| e.into_inner());
         for entry in observers.iter() {
             if entry.collection == collection {
                 let _ = entry.sender.send(event.clone());
@@ -343,7 +343,10 @@ impl DocumentStore for InMemoryBackend {
             sender: tx,
         };
 
-        self.observers.lock().unwrap().push(entry);
+        self.observers
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(entry);
 
         Ok(ChangeStream { receiver: rx })
     }
@@ -479,7 +482,10 @@ impl PeerDiscovery for InMemoryBackend {
         peers.insert(peer_id, info.clone());
 
         // Notify callbacks
-        let callbacks = self.peer_callbacks.lock().unwrap();
+        let callbacks = self
+            .peer_callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         for cb in callbacks.iter() {
             cb(PeerEvent::Connected(info.clone()));
         }
@@ -508,7 +514,10 @@ impl PeerDiscovery for InMemoryBackend {
     }
 
     fn on_peer_event(&self, callback: Box<dyn Fn(PeerEvent) + Send + Sync>) {
-        let mut callbacks = self.peer_callbacks.lock().unwrap();
+        let mut callbacks = self
+            .peer_callbacks
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         callbacks.push(callback);
     }
 
@@ -1363,7 +1372,7 @@ mod tests {
 
         backend.on_peer_event(Box::new(move |event| {
             if matches!(event, PeerEvent::Connected(_)) {
-                *called_clone.lock().unwrap() = true;
+                *called_clone.lock().unwrap_or_else(|e| e.into_inner()) = true;
             }
         }));
 
@@ -1372,7 +1381,7 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(*called.lock().unwrap());
+        assert!(*called.lock().unwrap_or_else(|e| e.into_inner()));
     }
 
     // --- SyncEngine ---

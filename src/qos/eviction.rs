@@ -174,12 +174,18 @@ impl EvictionController {
 
     /// Set the eviction callback
     pub fn set_eviction_callback(&self, callback: EvictionCallback) {
-        *self.eviction_callback.write().unwrap() = Some(callback);
+        *self
+            .eviction_callback
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(callback);
     }
 
     /// Set the compression callback
     pub fn set_compression_callback(&self, callback: CompressionCallback) {
-        *self.compression_callback.write().unwrap() = Some(callback);
+        *self
+            .compression_callback
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(callback);
     }
 
     /// Run an eviction cycle if needed
@@ -288,7 +294,7 @@ impl EvictionController {
         self.record_cycle_completion(&result);
 
         // Store stats
-        let mut stats = self.recent_stats.write().unwrap();
+        let mut stats = self.recent_stats.write().unwrap_or_else(|e| e.into_inner());
         if stats.len() >= 10 {
             stats.remove(0);
         }
@@ -299,7 +305,10 @@ impl EvictionController {
 
     /// Compress eligible documents
     fn compress_eligible_documents(&self, result: &mut EvictionResult) -> usize {
-        let callback = self.compression_callback.read().unwrap();
+        let callback = self
+            .compression_callback
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let callback = match callback.as_ref() {
             Some(cb) => cb,
             None => return 0,
@@ -344,7 +353,10 @@ impl EvictionController {
 
     /// Evict a single document
     fn evict_document(&self, candidate: &EvictionCandidate) -> Result<usize, String> {
-        let callback = self.eviction_callback.read().unwrap();
+        let callback = self
+            .eviction_callback
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         let callback = callback.as_ref().ok_or("No eviction callback set")?;
 
         // Call the eviction callback
@@ -394,7 +406,10 @@ impl EvictionController {
 
     /// Remove protection from a document
     pub fn unmark_protected(&self, doc_id: &str) {
-        self.protected_docs.write().unwrap().remove(doc_id);
+        self.protected_docs
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(doc_id);
         self.storage.unmark_protected(doc_id);
 
         if let Some(doc) = self.storage.get_document(doc_id) {
@@ -409,7 +424,10 @@ impl EvictionController {
 
     /// Check if a document is protected
     pub fn is_protected(&self, doc_id: &str) -> bool {
-        self.protected_docs.read().unwrap().contains(doc_id)
+        self.protected_docs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains(doc_id)
     }
 
     /// Get storage metrics
@@ -419,7 +437,10 @@ impl EvictionController {
 
     /// Get recent eviction statistics
     pub fn recent_stats(&self) -> Vec<EvictionResult> {
-        self.recent_stats.read().unwrap().clone()
+        self.recent_stats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Get audit log summary
@@ -444,7 +465,10 @@ impl EvictionController {
 
     /// Get count of protected documents
     pub fn protected_count(&self) -> usize {
-        self.protected_docs.read().unwrap().len()
+        self.protected_docs
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 
@@ -454,11 +478,19 @@ impl std::fmt::Debug for EvictionController {
             .field("config", &self.config)
             .field(
                 "protected_count",
-                &self.protected_docs.read().unwrap().len(),
+                &self
+                    .protected_docs
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len(),
             )
             .field(
                 "recent_stats_count",
-                &self.recent_stats.read().unwrap().len(),
+                &self
+                    .recent_stats
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .len(),
             )
             .finish()
     }

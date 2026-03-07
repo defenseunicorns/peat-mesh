@@ -139,7 +139,7 @@ impl TokenBucket {
     /// Refill tokens based on elapsed time
     fn refill(&self) {
         let now = Instant::now();
-        let mut last = self.last_refill.write().unwrap();
+        let mut last = self.last_refill.write().unwrap_or_else(|e| e.into_inner());
 
         let elapsed = now.duration_since(*last);
         if elapsed < self.refill_interval {
@@ -482,7 +482,10 @@ impl FlowController {
     ) -> Result<(), FlowControlError> {
         // 1. Check rate limit
         {
-            let mut limiters = self.rate_limiters.write().unwrap();
+            let mut limiters = self
+                .rate_limiters
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             let limiter = limiters.entry(*peer_id).or_insert_with(|| {
                 TokenBucket::new(
                     self.config.max_messages_per_second,
@@ -499,7 +502,7 @@ impl FlowController {
 
         // 2. Check cooldown
         {
-            let mut cooldowns = self.cooldowns.write().unwrap();
+            let mut cooldowns = self.cooldowns.write().unwrap_or_else(|e| e.into_inner());
             cooldowns.check_cooldown(peer_id, doc_key)?;
         }
 
@@ -510,13 +513,13 @@ impl FlowController {
     ///
     /// Updates cooldown tracker to prevent sync storms.
     pub fn record_sync(&self, peer_id: &EndpointId, doc_key: &str) {
-        let mut cooldowns = self.cooldowns.write().unwrap();
+        let mut cooldowns = self.cooldowns.write().unwrap_or_else(|e| e.into_inner());
         cooldowns.record_sync(peer_id, doc_key);
     }
 
     /// Get or create resource tracker for peer
     pub fn get_resource_tracker(&self, peer_id: &EndpointId) -> Arc<PeerResourceTracker> {
-        let mut resources = self.resources.write().unwrap();
+        let mut resources = self.resources.write().unwrap_or_else(|e| e.into_inner());
         if !resources.contains_key(peer_id) {
             resources.insert(
                 *peer_id,
@@ -538,8 +541,8 @@ impl FlowController {
 
     /// Get current statistics
     pub fn stats(&self) -> FlowControlStats {
-        let cooldowns = self.cooldowns.read().unwrap();
-        let resources = self.resources.read().unwrap();
+        let cooldowns = self.cooldowns.read().unwrap_or_else(|e| e.into_inner());
+        let resources = self.resources.read().unwrap_or_else(|e| e.into_inner());
 
         let total_memory: u64 = resources
             .values()
@@ -562,7 +565,7 @@ impl FlowController {
 
     /// Clean up stale data
     pub fn cleanup(&self) {
-        let mut cooldowns = self.cooldowns.write().unwrap();
+        let mut cooldowns = self.cooldowns.write().unwrap_or_else(|e| e.into_inner());
         cooldowns.cleanup();
     }
 
@@ -573,7 +576,7 @@ impl FlowController {
 
     /// Get available tokens for a peer
     pub fn available_tokens(&self, peer_id: &EndpointId) -> u32 {
-        let limiters = self.rate_limiters.read().unwrap();
+        let limiters = self.rate_limiters.read().unwrap_or_else(|e| e.into_inner());
         limiters
             .get(peer_id)
             .map(|l| l.available_tokens())

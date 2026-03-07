@@ -610,7 +610,10 @@ impl AutomergeSyncCoordinator {
     /// This enables routing all sync operations through persistent channels
     /// instead of opening new streams for each operation.
     pub fn set_channel_manager(&self, manager: Arc<super::sync_channel::SyncChannelManager>) {
-        *self.channel_manager.write().unwrap() = Some(Arc::downgrade(&manager));
+        *self
+            .channel_manager
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(Arc::downgrade(&manager));
     }
 
     /// Get the channel manager if available
@@ -881,7 +884,7 @@ impl AutomergeSyncCoordinator {
                 .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
             {
-                let mut stats = self.peer_stats.write().unwrap();
+                let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
                 let peer_stat = stats.entry(peer_id).or_default();
                 peer_stat.bytes_sent += total_bytes as u64;
                 peer_stat.sync_count += 1;
@@ -937,7 +940,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_sent += total_bytes as u64;
             peer_stat.sync_count += 1;
@@ -996,7 +999,7 @@ impl AutomergeSyncCoordinator {
 
         // Update per-peer statistics
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_received += message_size as u64;
         }
@@ -1073,7 +1076,7 @@ impl AutomergeSyncCoordinator {
                 .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
             {
-                let mut stats = self.peer_stats.write().unwrap();
+                let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
                 let peer_stat = stats.entry(peer_id).or_default();
                 peer_stat.bytes_sent += total_bytes as u64;
                 peer_stat.sync_count += 1;
@@ -1134,7 +1137,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_sent += total_bytes as u64;
             peer_stat.sync_count += 1;
@@ -1318,7 +1321,7 @@ impl AutomergeSyncCoordinator {
 
     /// Get or create sync state for a peer
     fn get_or_create_sync_state(&self, doc_key: &str, peer_id: EndpointId) -> SyncState {
-        let mut states = self.peer_states.write().unwrap();
+        let mut states = self.peer_states.write().unwrap_or_else(|e| e.into_inner());
         states
             .entry(doc_key.to_string())
             .or_default()
@@ -1329,7 +1332,7 @@ impl AutomergeSyncCoordinator {
 
     /// Update sync state for a peer
     fn update_sync_state(&self, doc_key: &str, peer_id: EndpointId, state: SyncState) {
-        let mut states = self.peer_states.write().unwrap();
+        let mut states = self.peer_states.write().unwrap_or_else(|e| e.into_inner());
         states
             .entry(doc_key.to_string())
             .or_default()
@@ -1342,7 +1345,7 @@ impl AutomergeSyncCoordinator {
     /// the next sync attempt will generate a fresh sync message with the new
     /// document heads rather than thinking peers are already up-to-date.
     pub fn clear_sync_state_for_document(&self, doc_key: &str) {
-        let mut states = self.peer_states.write().unwrap();
+        let mut states = self.peer_states.write().unwrap_or_else(|e| e.into_inner());
         if states.remove(doc_key).is_some() {
             tracing::debug!("Cleared sync state for document {}", doc_key);
         }
@@ -1358,7 +1361,7 @@ impl AutomergeSyncCoordinator {
     /// sync state thinks "I already sent those changes" even though the peer
     /// never received them.
     pub fn clear_peer_sync_state(&self, peer_id: EndpointId) {
-        let mut states = self.peer_states.write().unwrap();
+        let mut states = self.peer_states.write().unwrap_or_else(|e| e.into_inner());
         let mut cleared_count = 0;
         for (_doc_key, peer_map) in states.iter_mut() {
             if peer_map.remove(&peer_id).is_some() {
@@ -1581,7 +1584,7 @@ impl AutomergeSyncCoordinator {
 
         // Update per-peer statistics
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_sent += total_bytes as u64;
             peer_stat.sync_count += batch.len() as u64;
@@ -1613,7 +1616,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_received += total_bytes as u64;
             peer_stat.sync_count += batch.len() as u64;
@@ -2033,7 +2036,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_sent += total_bytes as u64;
             peer_stat.sync_count += 1;
@@ -2203,7 +2206,7 @@ impl AutomergeSyncCoordinator {
 
         // Update per-peer statistics
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_received += payload_size as u64;
             peer_stat.sync_count += 1;
@@ -2271,7 +2274,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(payload_size as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_received += payload_size as u64;
             peer_stat.sync_count += 1;
@@ -2461,7 +2464,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_sent += total_bytes as u64;
         }
@@ -2493,7 +2496,7 @@ impl AutomergeSyncCoordinator {
             .fetch_add(payload_size as u64, Ordering::Relaxed);
 
         {
-            let mut stats = self.peer_stats.write().unwrap();
+            let mut stats = self.peer_stats.write().unwrap_or_else(|e| e.into_inner());
             let peer_stat = stats.entry(peer_id).or_default();
             peer_stat.bytes_received += payload_size as u64;
             peer_stat.sync_count += 1;
@@ -2553,12 +2556,19 @@ impl AutomergeSyncCoordinator {
 
     /// Get statistics for a specific peer
     pub fn peer_stats(&self, peer_id: &EndpointId) -> Option<PeerSyncStats> {
-        self.peer_stats.read().unwrap().get(peer_id).cloned()
+        self.peer_stats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Get statistics for all peers
     pub fn all_peer_stats(&self) -> HashMap<EndpointId, PeerSyncStats> {
-        self.peer_stats.read().unwrap().clone()
+        self.peer_stats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Get reference to the error handler for diagnostics

@@ -79,19 +79,19 @@ impl AutonomousOperationHandler {
     /// Check if currently in autonomous operation mode
     pub fn is_autonomous(&self) -> bool {
         matches!(
-            *self.state.read().unwrap(),
+            *self.state.read().unwrap_or_else(|e| e.into_inner()),
             AutonomousState::Autonomous { .. }
         )
     }
 
     /// Get current autonomous state
     pub fn get_state(&self) -> AutonomousState {
-        self.state.read().unwrap().clone()
+        self.state.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Enter autonomous operation mode
     fn enter_autonomous_mode(&self, detection_attempts: u32) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
 
         if matches!(*state, AutonomousState::Autonomous { .. }) {
             warn!("Already in autonomous mode, ignoring duplicate partition detection");
@@ -111,7 +111,7 @@ impl AutonomousOperationHandler {
 
     /// Exit autonomous operation mode (return to normal operation)
     fn exit_autonomous_mode(&self, autonomous_duration: std::time::Duration) {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
 
         if matches!(*state, AutonomousState::Normal) {
             warn!("Already in normal mode, ignoring duplicate partition healing");

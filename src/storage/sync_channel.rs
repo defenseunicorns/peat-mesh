@@ -163,7 +163,7 @@ impl SyncChannel {
             }
 
             // Mark channel as needing reconnection
-            *state.write().unwrap() = ChannelState::Reconnecting;
+            *state.write().unwrap_or_else(|e| e.into_inner()) = ChannelState::Reconnecting;
             tracing::debug!("Sync channel receiver ended for peer {:?}", peer_id);
         });
 
@@ -239,7 +239,7 @@ impl SyncChannel {
     pub async fn send(&self, batch: &SyncBatch) -> Result<()> {
         // Check channel state (read and release lock before any await)
         let needs_reconnect = {
-            let state = *self.state.read().unwrap();
+            let state = *self.state.read().unwrap_or_else(|e| e.into_inner());
             match state {
                 ChannelState::Closed => return Err(anyhow::anyhow!("Channel is closed")),
                 ChannelState::Reconnecting => true,
@@ -291,7 +291,7 @@ impl SyncChannel {
         self.bytes_sent
             .fetch_add(total_bytes as u64, Ordering::Relaxed);
         self.batches_sent.fetch_add(1, Ordering::Relaxed);
-        *self.last_send.write().unwrap() = Instant::now();
+        *self.last_send.write().unwrap_or_else(|e| e.into_inner()) = Instant::now();
 
         tracing::trace!(
             "Sent batch {} ({} entries, {} bytes) to peer {:?}",
@@ -307,11 +307,11 @@ impl SyncChannel {
     /// Attempt to reconnect the channel
     pub async fn reconnect(&self) -> Result<()> {
         // Update state
-        *self.state.write().unwrap() = ChannelState::Reconnecting;
+        *self.state.write().unwrap_or_else(|e| e.into_inner()) = ChannelState::Reconnecting;
 
         let attempts = self.reconnect_attempts.fetch_add(1, Ordering::Relaxed);
         if attempts >= Self::MAX_RECONNECT_ATTEMPTS {
-            *self.state.write().unwrap() = ChannelState::Closed;
+            *self.state.write().unwrap_or_else(|e| e.into_inner()) = ChannelState::Closed;
             return Err(anyhow::anyhow!(
                 "Max reconnection attempts ({}) exceeded",
                 Self::MAX_RECONNECT_ATTEMPTS
@@ -345,7 +345,7 @@ impl SyncChannel {
 
         // Update send stream
         *self.send.lock().await = Some(send);
-        *self.state.write().unwrap() = ChannelState::Connected;
+        *self.state.write().unwrap_or_else(|e| e.into_inner()) = ChannelState::Connected;
         self.reconnect_attempts.store(0, Ordering::Relaxed);
 
         tracing::info!("Reconnected sync channel to peer {:?}", self.peer_id);
@@ -354,12 +354,12 @@ impl SyncChannel {
 
     /// Check if channel is connected
     pub fn is_connected(&self) -> bool {
-        *self.state.read().unwrap() == ChannelState::Connected
+        *self.state.read().unwrap_or_else(|e| e.into_inner()) == ChannelState::Connected
     }
 
     /// Get channel state
     pub fn state(&self) -> ChannelState {
-        *self.state.read().unwrap()
+        *self.state.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get peer ID
@@ -379,7 +379,7 @@ impl SyncChannel {
 
     /// Close the channel
     pub async fn close(&self) {
-        *self.state.write().unwrap() = ChannelState::Closed;
+        *self.state.write().unwrap_or_else(|e| e.into_inner()) = ChannelState::Closed;
 
         // Cancel receiver task
         if let Some(task) = self.recv_task.lock().await.take() {
@@ -429,7 +429,7 @@ impl SyncChannelManager {
     pub async fn get_channel(&self, peer_id: EndpointId) -> Result<Arc<SyncChannel>> {
         // Check if we have an existing connected channel
         {
-            let channels = self.channels.read().unwrap();
+            let channels = self.channels.read().unwrap_or_else(|e| e.into_inner());
             if let Some(channel) = channels.get(&peer_id) {
                 if channel.is_connected() {
                     return Ok(Arc::clone(channel));
@@ -599,7 +599,11 @@ impl SyncChannelManager {
     /// Remove channel for a peer (e.g., on disconnect)
     pub async fn remove_channel(&self, peer_id: &EndpointId) {
         // Extract channel from map first, then close outside the lock
-        let channel = self.channels.write().unwrap().remove(peer_id);
+        let channel = self
+            .channels
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
         if let Some(channel) = channel {
             channel.close().await;
         }
@@ -607,12 +611,15 @@ impl SyncChannelManager {
 
     /// Get number of active channels
     pub fn channel_count(&self) -> usize {
-        self.channels.read().unwrap().len()
+        self.channels
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Get statistics for all channels
     pub fn stats(&self) -> ChannelManagerStats {
-        let channels = self.channels.read().unwrap();
+        let channels = self.channels.read().unwrap_or_else(|e| e.into_inner());
         let mut total_bytes = 0u64;
         let mut total_batches = 0u64;
         let mut connected = 0usize;
@@ -638,7 +645,7 @@ impl SyncChannelManager {
         self.active.store(false, Ordering::Relaxed);
 
         let channels: Vec<Arc<SyncChannel>> = {
-            let mut channels = self.channels.write().unwrap();
+            let mut channels = self.channels.write().unwrap_or_else(|e| e.into_inner());
             channels.drain().map(|(_, c)| c).collect()
         };
 

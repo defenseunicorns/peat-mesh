@@ -55,7 +55,7 @@ fn spawn_peer_connection_retry(
         loop {
             // Check current retry state
             let (attempts, sleep_duration) = {
-                let retry_state = peer_retry_state.read().unwrap();
+                let retry_state = peer_retry_state.read().unwrap_or_else(|e| e.into_inner());
                 match retry_state.as_ref() {
                     None => {
                         // No retry needed (might have been cleared by another task)
@@ -67,7 +67,10 @@ fn spawn_peer_connection_retry(
                                 "Max retries ({}) reached for peer {}, giving up",
                                 config.max_retries, peer_id
                             );
-                            peer_retry_state.write().unwrap().take();
+                            peer_retry_state
+                                .write()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .take();
                             return;
                         }
 
@@ -99,9 +102,13 @@ fn spawn_peer_connection_retry(
 
             match transport.connect(&node_id).await {
                 Ok(conn) => {
-                    *peer_connection.write().unwrap() = Some(conn);
-                    *selected_peer_id.write().unwrap() = Some(node_id.clone());
-                    peer_retry_state.write().unwrap().take();
+                    *peer_connection.write().unwrap_or_else(|e| e.into_inner()) = Some(conn);
+                    *selected_peer_id.write().unwrap_or_else(|e| e.into_inner()) =
+                        Some(node_id.clone());
+                    peer_retry_state
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
                     info!(
                         "Successfully connected to peer {} after {} retries",
                         peer_id, attempts
@@ -128,7 +135,10 @@ fn spawn_peer_connection_retry(
                             "Max retries ({}) reached for peer {}, giving up",
                             config.max_retries, peer_id
                         );
-                        peer_retry_state.write().unwrap().take();
+                        peer_retry_state
+                            .write()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .take();
                         return;
                     }
 
@@ -140,10 +150,11 @@ fn spawn_peer_connection_retry(
                     );
 
                     let next_retry = Instant::now() + backoff;
-                    *peer_retry_state.write().unwrap() = Some(RetryState {
-                        attempts: new_attempts,
-                        next_retry,
-                    });
+                    *peer_retry_state.write().unwrap_or_else(|e| e.into_inner()) =
+                        Some(RetryState {
+                            attempts: new_attempts,
+                            next_retry,
+                        });
 
                     debug!("Next retry for peer {} in {:?}", peer_id, backoff);
                 }
@@ -166,7 +177,9 @@ fn spawn_lateral_connection_retry(
         loop {
             // Check current retry state
             let (attempts, sleep_duration) = {
-                let retry_states = lateral_retry_state.read().unwrap();
+                let retry_states = lateral_retry_state
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner());
                 match retry_states.get(&peer_id) {
                     None => {
                         // No retry needed (might have been cleared)
@@ -178,7 +191,10 @@ fn spawn_lateral_connection_retry(
                                 "Max retries ({}) reached for lateral peer {}, giving up",
                                 config.max_retries, peer_id
                             );
-                            lateral_retry_state.write().unwrap().remove(&peer_id);
+                            lateral_retry_state
+                                .write()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&peer_id);
                             return;
                         }
 
@@ -214,7 +230,10 @@ fn spawn_lateral_connection_retry(
                         .write()
                         .unwrap()
                         .insert(peer_id.clone(), conn);
-                    lateral_retry_state.write().unwrap().remove(&peer_id);
+                    lateral_retry_state
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&peer_id);
                     info!(
                         "Successfully connected to lateral peer {} after {} retries",
                         peer_id, attempts
@@ -237,7 +256,10 @@ fn spawn_lateral_connection_retry(
                             "Max retries ({}) reached for lateral peer {}, giving up",
                             config.max_retries, peer_id
                         );
-                        lateral_retry_state.write().unwrap().remove(&peer_id);
+                        lateral_retry_state
+                            .write()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&peer_id);
                         return;
                     }
 
@@ -249,13 +271,16 @@ fn spawn_lateral_connection_retry(
                     );
 
                     let next_retry = Instant::now() + backoff;
-                    lateral_retry_state.write().unwrap().insert(
-                        peer_id.clone(),
-                        RetryState {
-                            attempts: new_attempts,
-                            next_retry,
-                        },
-                    );
+                    lateral_retry_state
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .insert(
+                            peer_id.clone(),
+                            RetryState {
+                                attempts: new_attempts,
+                                next_retry,
+                            },
+                        );
 
                     debug!("Next retry for lateral peer {} in {:?}", peer_id, backoff);
                 }
@@ -378,7 +403,7 @@ impl TopologyManager {
                 .await;
             });
 
-            *self.task_handle.write().unwrap() = Some(handle);
+            *self.task_handle.write().unwrap_or_else(|e| e.into_inner()) = Some(handle);
         }
 
         Ok(())
@@ -389,7 +414,12 @@ impl TopologyManager {
     /// Stops the topology builder and disconnects from all peers.
     pub async fn stop(&self) -> Result<(), Box<dyn std::error::Error>> {
         // Abort the event loop task
-        if let Some(handle) = self.task_handle.write().unwrap().take() {
+        if let Some(handle) = self
+            .task_handle
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .take()
+        {
             handle.abort();
         }
 
@@ -397,7 +427,11 @@ impl TopologyManager {
         self.builder.stop().await;
 
         // Disconnect from current selected peer
-        let current_selected_peer_id = self.selected_peer_id.write().unwrap().take();
+        let current_selected_peer_id = self
+            .selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .take();
         if let Some(selected_peer_id) = current_selected_peer_id {
             if let Err(e) = self.transport.disconnect(&selected_peer_id).await {
                 warn!("Failed to disconnect from selected peer during stop: {}", e);
@@ -423,7 +457,10 @@ impl TopologyManager {
             }
         }
 
-        self.lateral_connections.write().unwrap().clear();
+        self.lateral_connections
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
 
         // Stop the transport
         self.transport.stop().await?;
@@ -433,7 +470,10 @@ impl TopologyManager {
 
     /// Get current selected peer node ID
     pub fn get_selected_peer_id(&self) -> Option<NodeId> {
-        self.selected_peer_id.read().unwrap().clone()
+        self.selected_peer_id
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Check if currently connected to a specific peer
@@ -463,7 +503,10 @@ impl TopologyManager {
 
     /// Get the number of lateral peer connections
     pub fn lateral_peer_count(&self) -> usize {
-        self.lateral_connections.read().unwrap().len()
+        self.lateral_connections
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Queue a telemetry packet for delivery.
@@ -488,7 +531,10 @@ impl TopologyManager {
             );
         }
 
-        let mut buffer = self.telemetry_buffer.write().unwrap();
+        let mut buffer = self
+            .telemetry_buffer
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
 
         if buffer.len() >= max_buffer_size {
             // Buffer is full - drop oldest packet (FIFO)
@@ -511,12 +557,15 @@ impl TopologyManager {
 
     /// Get current telemetry buffer size
     pub fn telemetry_buffer_size(&self) -> usize {
-        self.telemetry_buffer.read().unwrap().len()
+        self.telemetry_buffer
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Drain the telemetry buffer and return packets for async sending.
     fn drain_buffer(telemetry_buffer: &Arc<RwLock<Vec<DataPacket>>>) -> Vec<DataPacket> {
-        let mut buffer = telemetry_buffer.write().unwrap();
+        let mut buffer = telemetry_buffer.write().unwrap_or_else(|e| e.into_inner());
         buffer.drain(..).collect()
     }
 
@@ -578,9 +627,14 @@ impl TopologyManager {
                     // Connect to the selected peer
                     match transport.connect(&node_id).await {
                         Ok(conn) => {
-                            *peer_connection.write().unwrap() = Some(conn);
-                            *selected_peer_id.write().unwrap() = Some(node_id.clone());
-                            peer_retry_state.write().unwrap().take(); // Clear any retry state
+                            *peer_connection.write().unwrap_or_else(|e| e.into_inner()) =
+                                Some(conn);
+                            *selected_peer_id.write().unwrap_or_else(|e| e.into_inner()) =
+                                Some(node_id.clone());
+                            peer_retry_state
+                                .write()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .take(); // Clear any retry state
                             info!("Successfully connected to peer: {}", new_peer_id);
 
                             // Flush any buffered telemetry packets now that parent is available
@@ -598,10 +652,11 @@ impl TopologyManager {
                                     0, // First attempt
                                 );
 
-                                *peer_retry_state.write().unwrap() = Some(RetryState {
-                                    attempts: 0,
-                                    next_retry: Instant::now() + backoff,
-                                });
+                                *peer_retry_state.write().unwrap_or_else(|e| e.into_inner()) =
+                                    Some(RetryState {
+                                        attempts: 0,
+                                        next_retry: Instant::now() + backoff,
+                                    });
 
                                 debug!("Scheduled retry for peer {} in {:?}", new_peer_id, backoff);
 
@@ -627,7 +682,10 @@ impl TopologyManager {
                     info!("Selected peer changed: {} -> {}", old_peer_id, new_peer_id);
 
                     // Clear any existing retry state for old peer
-                    peer_retry_state.write().unwrap().take();
+                    peer_retry_state
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .take();
 
                     // Disconnect from old peer
                     let old_id = NodeId::new(old_peer_id.clone());
@@ -639,8 +697,10 @@ impl TopologyManager {
                     let new_id = NodeId::new(new_peer_id.clone());
                     match transport.connect(&new_id).await {
                         Ok(conn) => {
-                            *peer_connection.write().unwrap() = Some(conn);
-                            *selected_peer_id.write().unwrap() = Some(new_id.clone());
+                            *peer_connection.write().unwrap_or_else(|e| e.into_inner()) =
+                                Some(conn);
+                            *selected_peer_id.write().unwrap_or_else(|e| e.into_inner()) =
+                                Some(new_id.clone());
                             info!("Successfully changed to peer: {}", new_peer_id);
 
                             // Flush any buffered telemetry packets now that new parent is available
@@ -658,10 +718,11 @@ impl TopologyManager {
                                     0, // First attempt
                                 );
 
-                                *peer_retry_state.write().unwrap() = Some(RetryState {
-                                    attempts: 0,
-                                    next_retry: Instant::now() + backoff,
-                                });
+                                *peer_retry_state.write().unwrap_or_else(|e| e.into_inner()) =
+                                    Some(RetryState {
+                                        attempts: 0,
+                                        next_retry: Instant::now() + backoff,
+                                    });
 
                                 debug!(
                                     "Scheduled retry for new peer {} in {:?}",
@@ -686,8 +747,8 @@ impl TopologyManager {
                     info!("Selected peer lost: {}", lost_peer_id);
 
                     // Clear peer connection
-                    *peer_connection.write().unwrap() = None;
-                    *selected_peer_id.write().unwrap() = None;
+                    *peer_connection.write().unwrap_or_else(|e| e.into_inner()) = None;
+                    *selected_peer_id.write().unwrap_or_else(|e| e.into_inner()) = None;
 
                     // Disconnect from lost peer
                     let node_id = NodeId::new(lost_peer_id.clone());
@@ -736,7 +797,10 @@ impl TopologyManager {
 
                     // Check if we've reached the maximum lateral connections limit
                     let max_lateral = builder.config().max_lateral_connections;
-                    let current_count = lateral_connections.read().unwrap().len();
+                    let current_count = lateral_connections
+                        .read()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .len();
 
                     if let Some(max) = max_lateral {
                         if current_count >= max {
@@ -756,7 +820,10 @@ impl TopologyManager {
                                 .write()
                                 .unwrap()
                                 .insert(peer_id.clone(), conn);
-                            lateral_retry_state.write().unwrap().remove(&peer_id); // Clear any retry state
+                            lateral_retry_state
+                                .write()
+                                .unwrap_or_else(|e| e.into_inner())
+                                .remove(&peer_id); // Clear any retry state
                             info!(
                                 "Connected to lateral peer: {} ({}/{})",
                                 peer_id,
@@ -778,13 +845,16 @@ impl TopologyManager {
                                     0, // First attempt
                                 );
 
-                                lateral_retry_state.write().unwrap().insert(
-                                    peer_id.clone(),
-                                    RetryState {
-                                        attempts: 0,
-                                        next_retry: Instant::now() + backoff,
-                                    },
-                                );
+                                lateral_retry_state
+                                    .write()
+                                    .unwrap_or_else(|e| e.into_inner())
+                                    .insert(
+                                        peer_id.clone(),
+                                        RetryState {
+                                            attempts: 0,
+                                            next_retry: Instant::now() + backoff,
+                                        },
+                                    );
 
                                 debug!(
                                     "Scheduled retry for lateral peer {} in {:?}",
@@ -807,11 +877,21 @@ impl TopologyManager {
                     info!("Lateral peer lost: {}", peer_id);
 
                     // Clear any retry state for this peer
-                    lateral_retry_state.write().unwrap().remove(&peer_id);
+                    lateral_retry_state
+                        .write()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .remove(&peer_id);
 
                     // Disconnect from lost lateral peer
-                    if lateral_connections.read().unwrap().contains_key(&peer_id) {
-                        lateral_connections.write().unwrap().remove(&peer_id);
+                    if lateral_connections
+                        .read()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .contains_key(&peer_id)
+                    {
+                        lateral_connections
+                            .write()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .remove(&peer_id);
 
                         let node_id = NodeId::new(peer_id.clone());
                         if let Err(e) = transport.disconnect(&node_id).await {
@@ -865,11 +945,11 @@ mod tests {
         }
 
         fn is_started(&self) -> bool {
-            *self.started.read().unwrap()
+            *self.started.read().unwrap_or_else(|e| e.into_inner())
         }
 
         fn is_stopped(&self) -> bool {
-            *self.stopped.read().unwrap()
+            *self.stopped.read().unwrap_or_else(|e| e.into_inner())
         }
 
         fn has_connection(&self, node_id: &NodeId) -> bool {
@@ -903,17 +983,20 @@ mod tests {
     #[async_trait::async_trait]
     impl MeshTransport for MockTransport {
         async fn start(&self) -> Result<()> {
-            *self.started.write().unwrap() = true;
+            *self.started.write().unwrap_or_else(|e| e.into_inner()) = true;
             Ok(())
         }
 
         async fn stop(&self) -> Result<()> {
-            *self.stopped.write().unwrap() = true;
+            *self.stopped.write().unwrap_or_else(|e| e.into_inner()) = true;
             Ok(())
         }
 
         async fn connect(&self, peer_id: &NodeId) -> Result<Box<dyn MeshConnectionTrait>> {
-            self.connections.write().unwrap().push(peer_id.clone());
+            self.connections
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(peer_id.clone());
             Ok(Box::new(MockConnection {
                 peer_id: peer_id.clone(),
                 connected_at: std::time::Instant::now(),
@@ -921,7 +1004,10 @@ mod tests {
         }
 
         async fn disconnect(&self, peer_id: &NodeId) -> Result<()> {
-            self.connections.write().unwrap().retain(|id| id != peer_id);
+            self.connections
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .retain(|id| id != peer_id);
             Ok(())
         }
 
@@ -937,11 +1023,17 @@ mod tests {
         }
 
         fn peer_count(&self) -> usize {
-            self.connections.read().unwrap().len()
+            self.connections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
         }
 
         fn connected_peers(&self) -> Vec<NodeId> {
-            self.connections.read().unwrap().clone()
+            self.connections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
         }
 
         fn subscribe_peer_events(&self) -> crate::transport::PeerEventReceiver {
@@ -1083,20 +1175,36 @@ mod tests {
     #[test]
     fn test_new_has_no_peer_connection() {
         let mgr = make_test_manager();
-        assert!(mgr.peer_connection.read().unwrap().is_none());
+        assert!(mgr
+            .peer_connection
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
     }
 
     #[test]
     fn test_new_has_no_retry_state() {
         let mgr = make_test_manager();
-        assert!(mgr.peer_retry_state.read().unwrap().is_none());
-        assert!(mgr.lateral_retry_state.read().unwrap().is_empty());
+        assert!(mgr
+            .peer_retry_state
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
+        assert!(mgr
+            .lateral_retry_state
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty());
     }
 
     #[test]
     fn test_new_has_no_task_handle() {
         let mgr = make_test_manager();
-        assert!(mgr.task_handle.read().unwrap().is_none());
+        assert!(mgr
+            .task_handle
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
     }
 
     // =========================================================================
@@ -1113,7 +1221,9 @@ mod tests {
     fn test_get_selected_peer_id_returns_value_after_manual_set() {
         let mgr = make_test_manager();
         let node = NodeId::new("peer-alpha".to_string());
-        *mgr.selected_peer_id.write().unwrap() = Some(node.clone());
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(node.clone());
         assert_eq!(mgr.get_selected_peer_id(), Some(node));
     }
 
@@ -1132,7 +1242,9 @@ mod tests {
     fn test_is_connected_to_peer_true_when_selected() {
         let mgr = make_test_manager();
         let node = NodeId::new("peer-alpha".to_string());
-        *mgr.selected_peer_id.write().unwrap() = Some(node.clone());
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(node.clone());
         assert!(mgr.is_connected_to_peer(&node));
     }
 
@@ -1141,7 +1253,9 @@ mod tests {
         let mgr = make_test_manager();
         let connected = NodeId::new("peer-alpha".to_string());
         let other = NodeId::new("peer-beta".to_string());
-        *mgr.selected_peer_id.write().unwrap() = Some(connected);
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(connected);
         assert!(!mgr.is_connected_to_peer(&other));
     }
 
@@ -1241,7 +1355,10 @@ mod tests {
         assert_eq!(mgr.telemetry_buffer_size(), 3);
 
         // Verify the oldest packet was dropped (payload [0] is gone)
-        let buffer = mgr.telemetry_buffer.read().unwrap();
+        let buffer = mgr
+            .telemetry_buffer
+            .read()
+            .unwrap_or_else(|e| e.into_inner());
         assert_eq!(buffer[0].payload, vec![1]);
         assert_eq!(buffer[1].payload, vec![2]);
         assert_eq!(buffer[2].payload, vec![99]);
@@ -1270,7 +1387,9 @@ mod tests {
     fn test_send_telemetry_buffers_even_when_parent_present() {
         let mgr = make_test_manager();
         // Simulate a parent connection by setting selected_peer_id
-        *mgr.selected_peer_id.write().unwrap() = Some(NodeId::new("parent-node".to_string()));
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(NodeId::new("parent-node".to_string()));
 
         let packet = DataPacket::telemetry("node-1", vec![1, 2, 3]);
         let result = mgr.send_telemetry(packet);
@@ -1281,7 +1400,9 @@ mod tests {
     #[test]
     fn test_send_telemetry_buffers_multiple_when_parent_present() {
         let mgr = make_test_manager();
-        *mgr.selected_peer_id.write().unwrap() = Some(NodeId::new("parent-node".to_string()));
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(NodeId::new("parent-node".to_string()));
 
         for i in 0..10 {
             let packet = DataPacket::telemetry("node-1", vec![i]);
@@ -1329,11 +1450,11 @@ mod tests {
                 .unwrap()
                 .push(DataPacket::telemetry("n", vec![i]));
         }
-        assert_eq!(buffer.read().unwrap().len(), 5);
+        assert_eq!(buffer.read().unwrap_or_else(|e| e.into_inner()).len(), 5);
 
         let packets = TopologyManager::drain_buffer(&buffer);
         assert_eq!(packets.len(), 5);
-        assert_eq!(buffer.read().unwrap().len(), 0);
+        assert_eq!(buffer.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
     }
 
     #[test]
@@ -1341,7 +1462,7 @@ mod tests {
         let buffer: Arc<RwLock<Vec<DataPacket>>> = Arc::new(RwLock::new(Vec::new()));
         let packets = TopologyManager::drain_buffer(&buffer);
         assert!(packets.is_empty());
-        assert_eq!(buffer.read().unwrap().len(), 0);
+        assert_eq!(buffer.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
     }
 
     #[tokio::test]
@@ -1357,7 +1478,7 @@ mod tests {
         let peer = NodeId::new("parent".into());
 
         TopologyManager::flush_buffer(&buffer, &transport, &peer).await;
-        assert_eq!(buffer.read().unwrap().len(), 0);
+        assert_eq!(buffer.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
     }
 
     #[tokio::test]
@@ -1367,7 +1488,7 @@ mod tests {
         let peer = NodeId::new("parent".into());
 
         TopologyManager::flush_buffer(&buffer, &transport, &peer).await;
-        assert_eq!(buffer.read().unwrap().len(), 0);
+        assert_eq!(buffer.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
     }
 
     // =========================================================================
@@ -1399,7 +1520,11 @@ mod tests {
         assert!(result.is_ok());
 
         // After start, there should be a running task handle
-        assert!(mgr.task_handle.read().unwrap().is_some());
+        assert!(mgr
+            .task_handle
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
     }
 
     #[tokio::test]
@@ -1411,7 +1536,11 @@ mod tests {
         assert!(result.is_ok());
 
         // After stop, task handle should be cleared
-        assert!(mgr.task_handle.read().unwrap().is_none());
+        assert!(mgr
+            .task_handle
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
         // selected_peer_id should be cleared
         assert!(mgr.get_selected_peer_id().is_none());
     }
@@ -1431,7 +1560,9 @@ mod tests {
 
         // Simulate a selected peer
         let node = NodeId::new("peer-1".to_string());
-        *mgr.selected_peer_id.write().unwrap() = Some(node);
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(node);
 
         let result = mgr.stop().await;
         assert!(result.is_ok());
@@ -1523,10 +1654,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Verify the selected peer was set
-        let peer = sel_clone.read().unwrap().clone();
+        let peer = sel_clone.read().unwrap_or_else(|e| e.into_inner()).clone();
         assert!(peer.is_some());
         assert_eq!(peer.unwrap().as_str(), "selected-peer");
-        assert!(pc_clone.read().unwrap().is_some());
+        assert!(pc_clone.read().unwrap_or_else(|e| e.into_inner()).is_some());
 
         // Clean up
         handle.abort();
@@ -1586,8 +1717,11 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Verify the peer was cleared
-        assert!(sel_clone.read().unwrap().is_none());
-        assert!(pc_clone.read().unwrap().is_none());
+        assert!(sel_clone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
+        assert!(pc_clone.read().unwrap_or_else(|e| e.into_inner()).is_none());
 
         handle.abort();
     }
@@ -1650,7 +1784,7 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        let peer = sel_clone.read().unwrap().clone();
+        let peer = sel_clone.read().unwrap_or_else(|e| e.into_inner()).clone();
         assert!(peer.is_some());
         assert_eq!(peer.unwrap().as_str(), "new-peer");
 
@@ -1713,7 +1847,10 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        assert!(lat_clone.read().unwrap().contains_key("lateral-1"));
+        assert!(lat_clone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key("lateral-1"));
 
         handle.abort();
     }
@@ -1778,7 +1915,10 @@ mod tests {
 
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        assert!(!lat_clone.read().unwrap().contains_key("lateral-1"));
+        assert!(!lat_clone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key("lateral-1"));
 
         handle.abort();
     }
@@ -1818,7 +1958,13 @@ mod tests {
                 .unwrap()
                 .push(DataPacket::telemetry("node-1", vec![i]));
         }
-        assert_eq!(telemetry_buffer.read().unwrap().len(), 3);
+        assert_eq!(
+            telemetry_buffer
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len(),
+            3
+        );
 
         let buf_clone = telemetry_buffer.clone();
 
@@ -1849,7 +1995,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Buffer should be flushed
-        assert_eq!(buf_clone.read().unwrap().len(), 0);
+        assert_eq!(buf_clone.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
 
         handle.abort();
     }
@@ -2086,7 +2232,9 @@ mod tests {
         assert_eq!(mgr.telemetry_buffer_size(), 0);
 
         // Now set parent and send — always buffers for event loop delivery
-        *mgr.selected_peer_id.write().unwrap() = Some(NodeId::new("parent".to_string()));
+        *mgr.selected_peer_id
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = Some(NodeId::new("parent".to_string()));
         let result = mgr.send_telemetry(DataPacket::telemetry("n", vec![42]));
         assert_eq!(result, Ok(false)); // Always buffered now
         assert_eq!(mgr.telemetry_buffer_size(), 1);
@@ -2199,15 +2347,15 @@ mod tests {
     #[async_trait::async_trait]
     impl MeshTransport for FailingTransport {
         async fn start(&self) -> Result<()> {
-            *self.started.write().unwrap() = true;
+            *self.started.write().unwrap_or_else(|e| e.into_inner()) = true;
             Ok(())
         }
         async fn stop(&self) -> Result<()> {
-            *self.stopped.write().unwrap() = true;
+            *self.stopped.write().unwrap_or_else(|e| e.into_inner()) = true;
             Ok(())
         }
         async fn connect(&self, peer_id: &NodeId) -> Result<Box<dyn MeshConnectionTrait>> {
-            let mut fail_count = self.fail_count.write().unwrap();
+            let mut fail_count = self.fail_count.write().unwrap_or_else(|e| e.into_inner());
             if *fail_count > 0 {
                 *fail_count -= 1;
                 return Err(crate::transport::TransportError::ConnectionFailed(format!(
@@ -2215,24 +2363,36 @@ mod tests {
                     peer_id
                 )));
             }
-            self.connections.write().unwrap().push(peer_id.clone());
+            self.connections
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .push(peer_id.clone());
             Ok(Box::new(MockConnection {
                 peer_id: peer_id.clone(),
                 connected_at: std::time::Instant::now(),
             }))
         }
         async fn disconnect(&self, peer_id: &NodeId) -> Result<()> {
-            self.connections.write().unwrap().retain(|id| id != peer_id);
+            self.connections
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .retain(|id| id != peer_id);
             Ok(())
         }
         fn get_connection(&self, _peer_id: &NodeId) -> Option<Box<dyn MeshConnectionTrait>> {
             None
         }
         fn peer_count(&self) -> usize {
-            self.connections.read().unwrap().len()
+            self.connections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .len()
         }
         fn connected_peers(&self) -> Vec<NodeId> {
-            self.connections.read().unwrap().clone()
+            self.connections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
         }
         fn subscribe_peer_events(&self) -> crate::transport::PeerEventReceiver {
             let (_tx, rx) = tokio::sync::mpsc::channel(256);
@@ -2304,7 +2464,7 @@ mod tests {
         // Wait for retry to succeed
         tokio::time::sleep(Duration::from_millis(500)).await;
 
-        let peer = sel_clone.read().unwrap().clone();
+        let peer = sel_clone.read().unwrap_or_else(|e| e.into_inner()).clone();
         assert!(peer.is_some(), "Peer should connect after retries");
         assert_eq!(peer.unwrap().as_str(), "retry-peer");
 
@@ -2377,7 +2537,7 @@ mod tests {
         // Wait for retry to succeed
         tokio::time::sleep(Duration::from_millis(300)).await;
 
-        let peer = sel_clone.read().unwrap().clone();
+        let peer = sel_clone.read().unwrap_or_else(|e| e.into_inner()).clone();
         assert!(peer.is_some());
         assert_eq!(peer.unwrap().as_str(), "new-peer");
 
@@ -2448,7 +2608,10 @@ mod tests {
         // Wait for retry to succeed
         tokio::time::sleep(Duration::from_millis(300)).await;
 
-        assert!(lat_clone.read().unwrap().contains_key("lat-retry"));
+        assert!(lat_clone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key("lat-retry"));
 
         handle.abort();
     }
@@ -2512,7 +2675,7 @@ mod tests {
         .unwrap();
 
         tokio::time::sleep(Duration::from_millis(50)).await;
-        assert_eq!(lat_clone.read().unwrap().len(), 1);
+        assert_eq!(lat_clone.read().unwrap_or_else(|e| e.into_inner()).len(), 1);
 
         // Second lateral peer should be skipped (limit=1)
         let beacon2 = crate::beacon::GeographicBeacon::new(
@@ -2553,7 +2716,11 @@ mod tests {
         let transport = Arc::new(MockTransport::new());
         // Pre-connect the peer in transport
         let node_id = NodeId::new("stale-peer".to_string());
-        transport.connections.write().unwrap().push(node_id.clone());
+        transport
+            .connections
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(node_id.clone());
 
         let transport: Arc<dyn MeshTransport> = transport;
 
@@ -2661,7 +2828,7 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Buffer should be flushed after PeerChanged
-        assert_eq!(buf_clone.read().unwrap().len(), 0);
+        assert_eq!(buf_clone.read().unwrap_or_else(|e| e.into_inner()).len(), 0);
 
         handle.abort();
     }
@@ -2695,13 +2862,16 @@ mod tests {
         let telemetry_buffer: Arc<RwLock<Vec<DataPacket>>> = Arc::new(RwLock::new(Vec::new()));
 
         // Pre-populate lateral retry state
-        lateral_retry_state.write().unwrap().insert(
-            "lat-1".to_string(),
-            RetryState {
-                attempts: 1,
-                next_retry: Instant::now() + Duration::from_secs(10),
-            },
-        );
+        lateral_retry_state
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .insert(
+                "lat-1".to_string(),
+                RetryState {
+                    attempts: 1,
+                    next_retry: Instant::now() + Duration::from_secs(10),
+                },
+            );
 
         let retry_clone = lateral_retry_state.clone();
 
@@ -2726,7 +2896,10 @@ mod tests {
         tokio::time::sleep(Duration::from_millis(50)).await;
 
         // Retry state should be cleared for the lost peer
-        assert!(!retry_clone.read().unwrap().contains_key("lat-1"));
+        assert!(!retry_clone
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key("lat-1"));
 
         handle.abort();
     }

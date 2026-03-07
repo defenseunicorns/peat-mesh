@@ -59,13 +59,13 @@ impl MeshSyncTransport {
 
     /// Store (or replace) the connection for a peer.
     pub fn insert_connection(&self, peer_id: EndpointId, conn: Connection) {
-        let mut conns = self.connections.write().unwrap();
+        let mut conns = self.connections.write().unwrap_or_else(|e| e.into_inner());
         conns.insert(peer_id, conn);
     }
 
     /// Remove the connection for a peer.
     pub fn remove_connection(&self, peer_id: &EndpointId) {
-        let mut conns = self.connections.write().unwrap();
+        let mut conns = self.connections.write().unwrap_or_else(|e| e.into_inner());
         conns.remove(peer_id);
     }
 
@@ -137,12 +137,12 @@ impl MeshSyncTransport {
 #[async_trait]
 impl SyncTransport for MeshSyncTransport {
     fn get_connection(&self, peer_id: &EndpointId) -> Option<Connection> {
-        let conns = self.connections.read().unwrap();
+        let conns = self.connections.read().unwrap_or_else(|e| e.into_inner());
         conns.get(peer_id).cloned()
     }
 
     fn connected_peers(&self) -> Vec<EndpointId> {
-        let mut conns = self.connections.write().unwrap();
+        let mut conns = self.connections.write().unwrap_or_else(|e| e.into_inner());
         // Prune closed connections while we enumerate.
         conns.retain(|_id, conn| conn.close_reason().is_none());
         conns.keys().copied().collect()

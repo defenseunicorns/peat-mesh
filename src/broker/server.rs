@@ -795,7 +795,7 @@ mod tests {
 
             /// Drop the sender, closing the broadcast channel.
             fn close(&self) {
-                self.tx.lock().unwrap().take();
+                self.tx.lock().unwrap_or_else(|e| e.into_inner()).take();
             }
         }
 
@@ -823,7 +823,7 @@ mod tests {
             }
             fn subscribe_events(&self) -> broadcast::Receiver<MeshEvent> {
                 // Return a receiver from the current sender, or a dummy closed one.
-                let guard = self.tx.lock().unwrap();
+                let guard = self.tx.lock().unwrap_or_else(|e| e.into_inner());
                 match &*guard {
                     Some(tx) => tx.subscribe(),
                     None => {

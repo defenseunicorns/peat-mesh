@@ -209,7 +209,7 @@ impl EvictionAuditLog {
 
     /// Record an audit entry
     pub fn record(&self, entry: AuditEntry) {
-        let mut entries = self.entries.write().unwrap();
+        let mut entries = self.entries.write().unwrap_or_else(|e| e.into_inner());
         if entries.len() >= self.max_entries {
             entries.pop_front();
         }
@@ -265,7 +265,12 @@ impl EvictionAuditLog {
 
     /// Get all entries (clone)
     pub fn get_all(&self) -> Vec<AuditEntry> {
-        self.entries.read().unwrap().iter().cloned().collect()
+        self.entries
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .iter()
+            .cloned()
+            .collect()
     }
 
     /// Get entries within a time range
@@ -303,7 +308,7 @@ impl EvictionAuditLog {
 
     /// Get recent entries (last N)
     pub fn get_recent(&self, count: usize) -> Vec<AuditEntry> {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         entries
             .iter()
             .rev()
@@ -317,22 +322,28 @@ impl EvictionAuditLog {
 
     /// Get number of entries
     pub fn len(&self) -> usize {
-        self.entries.read().unwrap().len()
+        self.entries.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Check if log is empty
     pub fn is_empty(&self) -> bool {
-        self.entries.read().unwrap().is_empty()
+        self.entries
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_empty()
     }
 
     /// Clear all entries
     pub fn clear(&self) {
-        self.entries.write().unwrap().clear();
+        self.entries
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     /// Get summary statistics
     pub fn summary(&self) -> AuditSummary {
-        let entries = self.entries.read().unwrap();
+        let entries = self.entries.read().unwrap_or_else(|e| e.into_inner());
         let mut summary = AuditSummary::default();
 
         for entry in entries.iter() {

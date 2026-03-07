@@ -386,7 +386,7 @@ impl SyncErrorHandler {
         peer_id: &EndpointId,
         error: SyncError,
     ) -> Result<Option<Duration>, SyncError> {
-        let mut health_map = self.peer_health.write().unwrap();
+        let mut health_map = self.peer_health.write().unwrap_or_else(|e| e.into_inner());
         let health = health_map.entry(*peer_id).or_default();
 
         // Record the failure
@@ -473,7 +473,7 @@ impl SyncErrorHandler {
 
     /// Record a successful sync operation
     pub fn record_success(&self, peer_id: &EndpointId) {
-        let mut health_map = self.peer_health.write().unwrap();
+        let mut health_map = self.peer_health.write().unwrap_or_else(|e| e.into_inner());
         let health = health_map.entry(*peer_id).or_default();
 
         health.record_success();
@@ -490,17 +490,24 @@ impl SyncErrorHandler {
 
     /// Get health status for a peer
     pub fn peer_health(&self, peer_id: &EndpointId) -> Option<PeerHealthTracker> {
-        self.peer_health.read().unwrap().get(peer_id).cloned()
+        self.peer_health
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Get health status for all peers
     pub fn all_peer_health(&self) -> HashMap<EndpointId, PeerHealthTracker> {
-        self.peer_health.read().unwrap().clone()
+        self.peer_health
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Reset health tracking for a peer
     pub fn reset_peer(&self, peer_id: &EndpointId) {
-        let mut health_map = self.peer_health.write().unwrap();
+        let mut health_map = self.peer_health.write().unwrap_or_else(|e| e.into_inner());
         if let Some(health) = health_map.get_mut(peer_id) {
             health.reset();
         }
