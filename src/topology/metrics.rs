@@ -299,30 +299,30 @@ impl InMemoryMetricsCollector {
     pub fn snapshot(&self) -> TopologyMetricsSnapshot {
         TopologyMetricsSnapshot {
             // Topology State
-            parent_id: self.parent_id.read().unwrap().clone(),
-            linked_peer_count: *self.linked_peer_count.read().unwrap(),
-            lateral_peer_count: *self.lateral_peer_count.read().unwrap(),
-            hierarchy_level: *self.hierarchy_level.read().unwrap(),
-            node_role: *self.node_role.read().unwrap(),
+            parent_id: self.parent_id.read().unwrap_or_else(|e| e.into_inner()).clone(),
+            linked_peer_count: *self.linked_peer_count.read().unwrap_or_else(|e| e.into_inner()),
+            lateral_peer_count: *self.lateral_peer_count.read().unwrap_or_else(|e| e.into_inner()),
+            hierarchy_level: *self.hierarchy_level.read().unwrap_or_else(|e| e.into_inner()),
+            node_role: *self.node_role.read().unwrap_or_else(|e| e.into_inner()),
 
             // Connection Health
-            parent_connected: *self.parent_connected.read().unwrap(),
-            connection_uptime: *self.connection_uptime.read().unwrap(),
-            retry_attempts_total: *self.retry_attempts_total.read().unwrap(),
-            last_connection_success: *self.last_connection_success.read().unwrap(),
+            parent_connected: *self.parent_connected.read().unwrap_or_else(|e| e.into_inner()),
+            connection_uptime: *self.connection_uptime.read().unwrap_or_else(|e| e.into_inner()),
+            retry_attempts_total: *self.retry_attempts_total.read().unwrap_or_else(|e| e.into_inner()),
+            last_connection_success: *self.last_connection_success.read().unwrap_or_else(|e| e.into_inner()),
 
             // Failover
-            parent_switches_total: *self.parent_switches_total.read().unwrap(),
-            last_failover_duration: *self.last_failover_duration.read().unwrap(),
-            last_failover_retry_attempts: *self.last_failover_retry_attempts.read().unwrap(),
-            last_failover_buffer_usage: *self.last_failover_buffer_usage.read().unwrap(),
+            parent_switches_total: *self.parent_switches_total.read().unwrap_or_else(|e| e.into_inner()),
+            last_failover_duration: *self.last_failover_duration.read().unwrap_or_else(|e| e.into_inner()),
+            last_failover_retry_attempts: *self.last_failover_retry_attempts.read().unwrap_or_else(|e| e.into_inner()),
+            last_failover_buffer_usage: *self.last_failover_buffer_usage.read().unwrap_or_else(|e| e.into_inner()),
 
             // Performance
-            telemetry_sent_total: *self.telemetry_sent_total.read().unwrap(),
-            telemetry_buffered_total: *self.telemetry_buffered_total.read().unwrap(),
-            buffer_current: *self.buffer_current.read().unwrap(),
-            buffer_max: *self.buffer_max.read().unwrap(),
-            last_evaluation_duration: *self.last_evaluation_duration.read().unwrap(),
+            telemetry_sent_total: *self.telemetry_sent_total.read().unwrap_or_else(|e| e.into_inner()),
+            telemetry_buffered_total: *self.telemetry_buffered_total.read().unwrap_or_else(|e| e.into_inner()),
+            buffer_current: *self.buffer_current.read().unwrap_or_else(|e| e.into_inner()),
+            buffer_max: *self.buffer_max.read().unwrap_or_else(|e| e.into_inner()),
+            last_evaluation_duration: *self.last_evaluation_duration.read().unwrap_or_else(|e| e.into_inner()),
 
             // Event Counters
             peer_selected_count: self
@@ -372,72 +372,72 @@ impl Default for InMemoryMetricsCollector {
 
 impl MetricsCollector for InMemoryMetricsCollector {
     fn set_parent_id(&self, parent_id: Option<String>) {
-        *self.parent_id.write().unwrap() = parent_id;
+        *self.parent_id.write().unwrap_or_else(|e| e.into_inner()) = parent_id;
     }
 
     fn set_linked_peer_count(&self, count: usize) {
-        *self.linked_peer_count.write().unwrap() = count;
+        *self.linked_peer_count.write().unwrap_or_else(|e| e.into_inner()) = count;
     }
 
     fn set_lateral_peer_count(&self, count: usize) {
-        *self.lateral_peer_count.write().unwrap() = count;
+        *self.lateral_peer_count.write().unwrap_or_else(|e| e.into_inner()) = count;
     }
 
     fn set_hierarchy_level(&self, level: HierarchyLevel) {
-        *self.hierarchy_level.write().unwrap() = Some(level);
+        *self.hierarchy_level.write().unwrap_or_else(|e| e.into_inner()) = Some(level);
     }
 
     fn set_node_role(&self, role: NodeRole) {
-        *self.node_role.write().unwrap() = Some(role);
+        *self.node_role.write().unwrap_or_else(|e| e.into_inner()) = Some(role);
     }
 
     fn set_parent_connected(&self, connected: bool) {
-        *self.parent_connected.write().unwrap() = connected;
+        *self.parent_connected.write().unwrap_or_else(|e| e.into_inner()) = connected;
     }
 
     fn set_connection_uptime(&self, uptime: Duration) {
-        *self.connection_uptime.write().unwrap() = uptime;
+        *self.connection_uptime.write().unwrap_or_else(|e| e.into_inner()) = uptime;
     }
 
     fn increment_retry_attempts(&self) {
-        *self.retry_attempts_total.write().unwrap() += 1;
+        *self.retry_attempts_total.write().unwrap_or_else(|e| e.into_inner()) += 1;
     }
 
     fn record_connection_success(&self, timestamp: Instant) {
-        *self.last_connection_success.write().unwrap() = Some(timestamp);
+        *self.last_connection_success.write().unwrap_or_else(|e| e.into_inner()) = Some(timestamp);
     }
 
     fn increment_parent_switches(&self) {
-        *self.parent_switches_total.write().unwrap() += 1;
+        *self.parent_switches_total.write().unwrap_or_else(|e| e.into_inner()) += 1;
     }
 
     fn record_failover_duration(&self, duration: Duration) {
-        *self.last_failover_duration.write().unwrap() = Some(duration);
+        *self.last_failover_duration.write().unwrap_or_else(|e| e.into_inner()) = Some(duration);
     }
 
     fn record_failover_retry_attempts(&self, attempts: u32) {
-        *self.last_failover_retry_attempts.write().unwrap() = Some(attempts);
+        *self.last_failover_retry_attempts.write().unwrap_or_else(|e| e.into_inner()) = Some(attempts);
     }
 
     fn record_failover_buffer_usage(&self, used: usize, max: usize) {
-        *self.last_failover_buffer_usage.write().unwrap() = Some((used, max));
+        *self.last_failover_buffer_usage.write().unwrap_or_else(|e| e.into_inner()) = Some((used, max));
     }
 
     fn increment_telemetry_sent(&self) {
-        *self.telemetry_sent_total.write().unwrap() += 1;
+        *self.telemetry_sent_total.write().unwrap_or_else(|e| e.into_inner()) += 1;
     }
 
     fn increment_telemetry_buffered(&self) {
-        *self.telemetry_buffered_total.write().unwrap() += 1;
+        *self.telemetry_buffered_total.write().unwrap_or_else(|e| e.into_inner()) += 1;
     }
 
     fn set_buffer_utilization(&self, current: usize, max: usize) {
-        *self.buffer_current.write().unwrap() = current;
-        *self.buffer_max.write().unwrap() = max;
+        *self.buffer_current.write().unwrap_or_else(|e| e.into_inner()) = current;
+        *self.buffer_max.write().unwrap_or_else(|e| e.into_inner()) = max;
     }
 
     fn record_evaluation_duration(&self, duration: Duration) {
-        *self.last_evaluation_duration.write().unwrap() = Some(duration);
+        *self.last_evaluation_duration.write().unwrap_or_else(|e| e.into_inner()) = Some(duration);
     }
 
     fn record_event_latency(&self, _event_type: &str, _latency: Duration) {

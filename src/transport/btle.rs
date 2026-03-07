@@ -161,17 +161,17 @@ impl<A: BleAdapter + Send + Sync + 'static> PeatBleTransport<A> {
 
     /// Mark a peer as reachable (discovered via BLE scan)
     pub fn add_reachable_peer(&self, peer_id: NodeId) {
-        self.reachable_peers.write().unwrap().insert(peer_id);
+        self.reachable_peers.write().unwrap_or_else(|e| e.into_inner()).insert(peer_id);
     }
 
     /// Remove a peer from reachable set
     pub fn remove_reachable_peer(&self, peer_id: &NodeId) {
-        self.reachable_peers.write().unwrap().remove(peer_id);
+        self.reachable_peers.write().unwrap_or_else(|e| e.into_inner()).remove(peer_id);
     }
 
     /// Emit a peer event to all subscribers
     fn emit_event(&self, event: PeerEvent) {
-        let senders = self.event_senders.read().unwrap();
+        let senders = self.event_senders.read().unwrap_or_else(|e| e.into_inner());
         for sender in senders.iter() {
             let _ = sender.try_send(event.clone());
         }
@@ -184,7 +184,7 @@ impl<A: BleAdapter + Send + Sync + 'static> PeatBleTransport<A> {
 
     /// Get the count of reachable peers (discovered via BLE scan)
     pub fn reachable_peer_count(&self) -> usize {
-        self.reachable_peers.read().unwrap().len()
+        self.reachable_peers.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Get the node ID of this transport
@@ -200,7 +200,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for PeatBleTransport<A
             .start()
             .await
             .map_err(|e| TransportError::Other(e.to_string().into()))?;
-        *self.started.write().unwrap() = Some(Instant::now());
+        *self.started.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
         Ok(())
     }
 
@@ -209,7 +209,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for PeatBleTransport<A
             .stop()
             .await
             .map_err(|e| TransportError::Other(e.to_string().into()))?;
-        *self.started.write().unwrap() = None;
+        *self.started.write().unwrap_or_else(|e| e.into_inner()) = None;
         Ok(())
     }
 
@@ -302,7 +302,7 @@ impl<A: BleAdapter + Send + Sync + 'static> MeshTransport for PeatBleTransport<A
 
     fn subscribe_peer_events(&self) -> PeerEventReceiver {
         let (tx, rx) = mpsc::channel(PEER_EVENT_CHANNEL_CAPACITY);
-        self.event_senders.write().unwrap().push(tx);
+        self.event_senders.write().unwrap_or_else(|e| e.into_inner()).push(tx);
         rx
     }
 
@@ -331,7 +331,7 @@ impl<A: BleAdapter + Send + Sync + 'static> Transport for PeatBleTransport<A> {
     }
 
     fn is_available(&self) -> bool {
-        self.started.read().unwrap().is_some()
+        self.started.read().unwrap_or_else(|e| e.into_inner()).is_some()
     }
 
     fn signal_quality(&self) -> Option<u8> {
@@ -341,7 +341,7 @@ impl<A: BleAdapter + Send + Sync + 'static> Transport for PeatBleTransport<A> {
 
     fn can_reach(&self, peer_id: &NodeId) -> bool {
         // Check if peer was discovered or is connected
-        self.reachable_peers.read().unwrap().contains(peer_id) || self.is_connected(peer_id)
+        self.reachable_peers.read().unwrap_or_else(|e| e.into_inner()).contains(peer_id) || self.is_connected(peer_id)
     }
 }
 

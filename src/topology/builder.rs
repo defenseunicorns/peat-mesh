@@ -209,7 +209,7 @@ impl TopologyBuilder {
 
     /// Start topology formation
     pub async fn start(&self) {
-        let mut handle_guard = self.task_handle.lock().unwrap();
+        let mut handle_guard = self.task_handle.lock().unwrap_or_else(|e| e.into_inner());
         if handle_guard.is_some() {
             return; // Already running
         }
@@ -234,7 +234,7 @@ impl TopologyBuilder {
                 }
 
                 // Evaluate topology
-                let current_pos = *position.lock().unwrap();
+                let current_pos = *position.lock().unwrap_or_else(|e| e.into_inner());
                 let selector =
                     PeerSelector::new(config.selection.clone(), current_pos, hierarchy_level);
 
@@ -242,7 +242,7 @@ impl TopologyBuilder {
                 let nearby = observer.get_nearby_beacons().await;
 
                 // Evaluate hierarchy strategy if provided
-                let mut state_lock = state.lock().unwrap();
+                let mut state_lock = state.lock().unwrap_or_else(|e| e.into_inner());
                 let current_hierarchy_level = if let (Some(strategy), Some(prof)) =
                     (config.hierarchy_strategy.as_ref(), profile.as_ref())
                 {
@@ -330,19 +330,19 @@ impl TopologyBuilder {
 
     /// Stop topology formation
     pub async fn stop(&self) {
-        if let Some(handle) = self.task_handle.lock().unwrap().take() {
+        if let Some(handle) = self.task_handle.lock().unwrap_or_else(|e| e.into_inner()).take() {
             handle.abort();
         }
     }
 
     /// Get current topology state
     pub fn get_state(&self) -> TopologyState {
-        self.state.lock().unwrap().clone()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Get current selected peer
     pub fn get_selected_peer(&self) -> Option<SelectedPeer> {
-        self.state.lock().unwrap().selected_peer.clone()
+        self.state.lock().unwrap_or_else(|e| e.into_inner()).selected_peer.clone()
     }
 
     /// Get topology configuration
@@ -354,17 +354,17 @@ impl TopologyBuilder {
     ///
     /// Can only be called once. Returns None if already taken.
     pub fn subscribe(&self) -> Option<mpsc::UnboundedReceiver<TopologyEvent>> {
-        self.event_rx.lock().unwrap().take()
+        self.event_rx.lock().unwrap_or_else(|e| e.into_inner()).take()
     }
 
     /// Update node position (for mobile nodes)
     pub fn update_position(&self, position: GeoPosition) {
-        *self.position.lock().unwrap() = position;
+        *self.position.lock().unwrap_or_else(|e| e.into_inner()) = position;
     }
 
     /// Force immediate re-evaluation of peer selection
     pub async fn reevaluate_peer(&self) {
-        let current_pos = *self.position.lock().unwrap();
+        let current_pos = *self.position.lock().unwrap_or_else(|e| e.into_inner());
         let selector = PeerSelector::new(
             self.config.selection.clone(),
             current_pos,
@@ -372,7 +372,7 @@ impl TopologyBuilder {
         );
 
         let nearby = self.observer.get_nearby_beacons().await;
-        let mut state_lock = self.state.lock().unwrap();
+        let mut state_lock = self.state.lock().unwrap_or_else(|e| e.into_inner());
 
         if let Some(candidate) = selector.select_peer(&nearby) {
             // Check if this is better than current selected peer
@@ -645,7 +645,7 @@ mod tests {
         let new_pos = GeoPosition::new(37.8000, -122.4000);
         builder.update_position(new_pos);
 
-        let updated_pos = *builder.position.lock().unwrap();
+        let updated_pos = *builder.position.lock().unwrap_or_else(|e| e.into_inner());
         assert_eq!(updated_pos.lat, 37.8000);
         assert_eq!(updated_pos.lon, -122.4000);
     }
@@ -834,11 +834,11 @@ mod tests {
         // Start, then stop
         builder.start().await;
         // task_handle should be set
-        assert!(builder.task_handle.lock().unwrap().is_some());
+        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_some());
 
         builder.stop().await;
         // task_handle should be taken (None)
-        assert!(builder.task_handle.lock().unwrap().is_none());
+        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_none());
     }
 
     #[tokio::test]
@@ -858,7 +858,7 @@ mod tests {
         builder.start().await;
         // Calling start a second time should be a no-op (not spawn a second task)
         builder.start().await;
-        assert!(builder.task_handle.lock().unwrap().is_some());
+        assert!(builder.task_handle.lock().unwrap_or_else(|e| e.into_inner()).is_some());
 
         builder.stop().await;
     }
@@ -904,7 +904,7 @@ mod tests {
         // Manually set a selected peer via update_selected_peer
         let beacon = create_test_beacon("peer-A", HierarchyLevel::Platoon);
         {
-            let mut state = builder.state.lock().unwrap();
+            let mut state = builder.state.lock().unwrap_or_else(|e| e.into_inner());
             TopologyBuilder::update_selected_peer(&mut state, &builder.event_tx, beacon);
         }
         assert_eq!(builder.get_selected_peer().unwrap().node_id, "peer-A");

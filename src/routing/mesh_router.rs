@@ -197,7 +197,7 @@ impl<A: Aggregator> MeshRouter<A> {
             return None;
         }
 
-        let mut pending = self.pending_aggregation.write().unwrap();
+        let mut pending = self.pending_aggregation.write().unwrap_or_else(|e| e.into_inner());
         pending.push(packet);
 
         if pending.len() >= self.config.aggregation_threshold {
@@ -228,12 +228,12 @@ impl<A: Aggregator> MeshRouter<A> {
 
     /// Get the number of packets pending aggregation
     pub fn pending_aggregation_count(&self) -> usize {
-        self.pending_aggregation.read().unwrap().len()
+        self.pending_aggregation.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Force aggregation of pending packets (even if below threshold)
     pub fn flush_aggregation(&self, squad_id: &str) -> Option<DataPacket> {
-        let mut pending = self.pending_aggregation.write().unwrap();
+        let mut pending = self.pending_aggregation.write().unwrap_or_else(|e| e.into_inner());
         if pending.is_empty() {
             return None;
         }

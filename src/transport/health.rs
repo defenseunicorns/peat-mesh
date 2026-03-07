@@ -223,7 +223,7 @@ impl HealthMonitor {
             return;
         }
 
-        let mut health = self.health.write().unwrap();
+        let mut health = self.health.write().unwrap_or_else(|e| e.into_inner());
         health
             .entry(peer_id.clone())
             .or_insert_with(PeerHealthState::new);
@@ -234,7 +234,7 @@ impl HealthMonitor {
     ///
     /// Should be called when a connection is closed.
     pub fn stop_monitoring(&self, peer_id: &NodeId) {
-        let mut health = self.health.write().unwrap();
+        let mut health = self.health.write().unwrap_or_else(|e| e.into_inner());
         if health.remove(peer_id).is_some() {
             trace!("Stopped health monitoring for peer: {}", peer_id);
         }
@@ -242,13 +242,13 @@ impl HealthMonitor {
 
     /// Get health status for a peer
     pub fn get_health(&self, peer_id: &NodeId) -> Option<ConnectionHealth> {
-        let health = self.health.read().unwrap();
+        let health = self.health.read().unwrap_or_else(|e| e.into_inner());
         health.get(peer_id).map(|s| s.to_connection_health())
     }
 
     /// Get all peers with unhealthy connections (Degraded or worse)
     pub fn unhealthy_peers(&self) -> Vec<NodeId> {
-        let health = self.health.read().unwrap();
+        let health = self.health.read().unwrap_or_else(|e| e.into_inner());
         health
             .iter()
             .filter(|(_, state)| state.state != ConnectionState::Healthy)
@@ -258,7 +258,7 @@ impl HealthMonitor {
 
     /// Get all peers marked as Dead
     pub fn dead_peers(&self) -> Vec<NodeId> {
-        let health = self.health.read().unwrap();
+        let health = self.health.read().unwrap_or_else(|e| e.into_inner());
         health
             .iter()
             .filter(|(_, state)| state.state == ConnectionState::Dead)
@@ -268,7 +268,7 @@ impl HealthMonitor {
 
     /// Subscribe to health events (degradation, failure)
     pub fn subscribe(&self, sender: PeerEventSender) {
-        self.event_senders.write().unwrap().push(sender);
+        self.event_senders.write().unwrap_or_else(|e| e.into_inner()).push(sender);
     }
 
     /// Get peers that need a heartbeat ping
@@ -279,7 +279,7 @@ impl HealthMonitor {
             return Vec::new();
         }
 
-        let health = self.health.read().unwrap();
+        let health = self.health.read().unwrap_or_else(|e| e.into_inner());
         let now = Instant::now();
 
         health
@@ -306,7 +306,7 @@ impl HealthMonitor {
     ///
     /// Returns the sequence number for this ping.
     pub fn record_ping_sent(&self, peer_id: &NodeId) -> Option<u64> {
-        let mut health = self.health.write().unwrap();
+        let mut health = self.health.write().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = health.get_mut(peer_id) {
             let seq = state.next_seq;
             state.next_seq += 1;
@@ -322,7 +322,7 @@ impl HealthMonitor {
     ///
     /// Updates RTT measurements and resets missed heartbeat count.
     pub fn record_pong_received(&self, peer_id: &NodeId, seq: u64) {
-        let mut health = self.health.write().unwrap();
+        let mut health = self.health.write().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = health.get_mut(peer_id) {
             // Check if this pong matches our pending ping
             if let Some((sent_at, expected_seq)) = state.pending_ping.take() {
@@ -354,7 +354,7 @@ impl HealthMonitor {
             return Vec::new();
         }
 
-        let mut health = self.health.write().unwrap();
+        let mut health = self.health.write().unwrap_or_else(|e| e.into_inner());
         let mut newly_dead = Vec::new();
         let mut degraded_events = Vec::new();
 
@@ -447,7 +447,7 @@ impl HealthMonitor {
 
     /// Emit an event to all subscribers
     fn emit_event(&self, event: PeerEvent) {
-        let mut senders = self.event_senders.write().unwrap();
+        let mut senders = self.event_senders.write().unwrap_or_else(|e| e.into_inner());
         senders.retain(|sender| match sender.try_send(event.clone()) {
             Ok(()) => true,
             Err(mpsc::error::TrySendError::Full(_)) => {
@@ -460,12 +460,12 @@ impl HealthMonitor {
 
     /// Get the number of peers being monitored
     pub fn monitored_peer_count(&self) -> usize {
-        self.health.read().unwrap().len()
+        self.health.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Clear all monitoring state
     pub fn clear(&self) {
-        self.health.write().unwrap().clear();
+        self.health.write().unwrap_or_else(|e| e.into_inner()).clear();
     }
 }
 

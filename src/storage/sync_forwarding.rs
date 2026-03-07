@@ -71,37 +71,37 @@ impl SyncForwarder {
 
     /// Set the parent node for upward forwarding
     pub fn set_parent(&self, parent_id: Option<EndpointId>) {
-        *self.parent_id.write().unwrap() = parent_id;
+        *self.parent_id.write().unwrap_or_else(|e| e.into_inner()) = parent_id;
     }
 
     /// Add a child node for downward forwarding
     pub fn add_child(&self, child_id: EndpointId) {
-        self.children.write().unwrap().insert(child_id);
+        self.children.write().unwrap_or_else(|e| e.into_inner()).insert(child_id);
     }
 
     /// Remove a child node
     pub fn remove_child(&self, child_id: &EndpointId) {
-        self.children.write().unwrap().remove(child_id);
+        self.children.write().unwrap_or_else(|e| e.into_inner()).remove(child_id);
     }
 
     /// Get the parent node ID
     pub fn parent_id(&self) -> Option<EndpointId> {
-        *self.parent_id.read().unwrap()
+        *self.parent_id.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get child node IDs
     pub fn children(&self) -> Vec<EndpointId> {
-        self.children.read().unwrap().iter().copied().collect()
+        self.children.read().unwrap_or_else(|e| e.into_inner()).iter().copied().collect()
     }
 
     /// Check if a batch has already been forwarded
     pub fn was_forwarded(&self, batch_id: u64) -> bool {
-        self.forwarded_batches.read().unwrap().contains(&batch_id)
+        self.forwarded_batches.read().unwrap_or_else(|e| e.into_inner()).contains(&batch_id)
     }
 
     /// Mark a batch as forwarded (for deduplication)
     pub fn mark_forwarded(&self, batch_id: u64) {
-        self.forwarded_batches.write().unwrap().put(batch_id, ());
+        self.forwarded_batches.write().unwrap_or_else(|e| e.into_inner()).put(batch_id, ());
     }
 
     /// Determine forwarding targets for a received batch

@@ -155,7 +155,7 @@ impl SelectiveRouter {
         let now = Instant::now();
 
         // Try to insert into cache
-        let mut cache = self.seen_packets.write().unwrap();
+        let mut cache = self.seen_packets.write().unwrap_or_else(|e| e.into_inner());
 
         // Check if already seen and not expired
         if let Some(entry) = cache.get(packet_id) {
@@ -200,12 +200,12 @@ impl SelectiveRouter {
 
     /// Get the number of entries in the deduplication cache
     pub fn dedup_cache_size(&self) -> usize {
-        self.seen_packets.read().unwrap().len()
+        self.seen_packets.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Clear the deduplication cache
     pub fn clear_dedup_cache(&self) {
-        self.seen_packets.write().unwrap().clear();
+        self.seen_packets.write().unwrap_or_else(|e| e.into_inner()).clear();
     }
 
     /// Make a complete routing decision for a packet

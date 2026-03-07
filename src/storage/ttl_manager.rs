@@ -107,7 +107,7 @@ impl TtlManager {
     pub fn set_ttl(&self, key: &str, ttl: Duration) -> Result<()> {
         let expiry_time = Instant::now() + ttl;
 
-        let mut expiry_map = self.expiry_map.write().unwrap();
+        let mut expiry_map = self.expiry_map.write().unwrap_or_else(|e| e.into_inner());
         expiry_map
             .entry(expiry_time)
             .or_default()
@@ -130,7 +130,7 @@ impl TtlManager {
 
         // Get all expired entries (expiry_time <= now)
         let expired_keys = {
-            let mut expiry_map = self.expiry_map.write().unwrap();
+            let mut expiry_map = self.expiry_map.write().unwrap_or_else(|e| e.into_inner());
 
             // Split at first entry > now, take everything before
             let split_key = expiry_map
@@ -183,7 +183,7 @@ impl TtlManager {
                 // Run cleanup
                 let now = Instant::now();
                 let expired_docs = {
-                    let mut expiry_map = expiry_map.write().unwrap();
+                    let mut expiry_map = expiry_map.write().unwrap_or_else(|e| e.into_inner());
 
                     // Get all expired entries
                     let split_key = expiry_map
@@ -212,12 +212,12 @@ impl TtlManager {
             }
         });
 
-        *self.cleanup_task.write().unwrap() = Some(handle);
+        *self.cleanup_task.write().unwrap_or_else(|e| e.into_inner()) = Some(handle);
     }
 
     /// Stop background cleanup task
     pub fn stop_background_cleanup(&self) {
-        if let Some(handle) = self.cleanup_task.write().unwrap().take() {
+        if let Some(handle) = self.cleanup_task.write().unwrap_or_else(|e| e.into_inner()).take() {
             handle.abort();
         }
     }

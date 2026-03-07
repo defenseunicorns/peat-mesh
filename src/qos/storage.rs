@@ -230,7 +230,7 @@ impl QoSAwareStorage {
 
     /// Register a document in storage
     pub fn register_document(&self, doc: StoredDocument) {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
 
         // If replacing existing doc, adjust storage
         if let Some(existing) = docs.get(&doc.doc_id) {
@@ -247,7 +247,7 @@ impl QoSAwareStorage {
 
     /// Remove a document from tracking
     pub fn unregister_document(&self, doc_id: &str) -> Option<StoredDocument> {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(doc) = docs.remove(doc_id) {
             self.current_storage_bytes
                 .fetch_sub(doc.size_bytes, Ordering::Relaxed);
@@ -259,7 +259,7 @@ impl QoSAwareStorage {
 
     /// Mark a document as accessed (updates last_accessed timestamp)
     pub fn touch_document(&self, doc_id: &str) {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(doc) = docs.get_mut(doc_id) {
             doc.touch();
         }
@@ -267,7 +267,7 @@ impl QoSAwareStorage {
 
     /// Mark a document as protected (never evict)
     pub fn mark_protected(&self, doc_id: &str) -> bool {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(doc) = docs.get_mut(doc_id) {
             doc.protected = true;
             true
@@ -278,7 +278,7 @@ impl QoSAwareStorage {
 
     /// Remove protection from a document
     pub fn unmark_protected(&self, doc_id: &str) -> bool {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(doc) = docs.get_mut(doc_id) {
             doc.protected = false;
             true
@@ -289,7 +289,7 @@ impl QoSAwareStorage {
 
     /// Update document size after compression
     pub fn update_compressed(&self, doc_id: &str, new_size: usize) -> Option<usize> {
-        let mut docs = self.documents.write().unwrap();
+        let mut docs = self.documents.write().unwrap_or_else(|e| e.into_inner());
         if let Some(doc) = docs.get_mut(doc_id) {
             let old_size = doc.size_bytes;
             let diff = old_size.saturating_sub(new_size);
@@ -326,7 +326,7 @@ impl QoSAwareStorage {
     /// Critical (P1) documents are never included.
     pub fn get_eviction_candidates(&self, bytes_needed: usize) -> Vec<EvictionCandidate> {
         let pressure = self.storage_pressure();
-        let docs = self.documents.read().unwrap();
+        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
 
         let mut candidates: Vec<EvictionCandidate> = docs
             .values()
@@ -418,7 +418,7 @@ impl QoSAwareStorage {
     /// Get documents eligible for compression
     pub fn get_compression_candidates(&self) -> Vec<String> {
         let pressure = self.storage_pressure();
-        let docs = self.documents.read().unwrap();
+        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
 
         docs.values()
             .filter(|doc| {
@@ -437,7 +437,7 @@ impl QoSAwareStorage {
 
     /// Get storage metrics
     pub fn metrics(&self) -> StorageMetrics {
-        let docs = self.documents.read().unwrap();
+        let docs = self.documents.read().unwrap_or_else(|e| e.into_inner());
         let used = self.current_storage_bytes.load(Ordering::Relaxed);
 
         let mut by_class: HashMap<QoSClass, ClassStorageMetrics> = HashMap::new();
@@ -479,17 +479,17 @@ impl QoSAwareStorage {
 
     /// Get count of tracked documents
     pub fn document_count(&self) -> usize {
-        self.documents.read().unwrap().len()
+        self.documents.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Check if a document exists
     pub fn contains(&self, doc_id: &str) -> bool {
-        self.documents.read().unwrap().contains_key(doc_id)
+        self.documents.read().unwrap_or_else(|e| e.into_inner()).contains_key(doc_id)
     }
 
     /// Get document info (read-only)
     pub fn get_document(&self, doc_id: &str) -> Option<StoredDocument> {
-        self.documents.read().unwrap().get(doc_id).cloned()
+        self.documents.read().unwrap_or_else(|e| e.into_inner()).get(doc_id).cloned()
     }
 
     /// Get max storage capacity
