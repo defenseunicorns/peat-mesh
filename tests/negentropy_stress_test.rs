@@ -26,10 +26,7 @@ fn make_items(prefix: &str, count: usize, base_ts: u64) -> Vec<SyncItem> {
 
 /// Run a full reconciliation between two NegentropySync instances,
 /// returning (rounds, total_bytes, have_count, need_count).
-fn run_reconciliation(
-    items_a: Vec<SyncItem>,
-    items_b: Vec<SyncItem>,
-) -> (u64, u64, usize, usize) {
+fn run_reconciliation(items_a: Vec<SyncItem>, items_b: Vec<SyncItem>) -> (u64, u64, usize, usize) {
     let peer_a = test_peer_id(1);
     let peer_b = test_peer_id(2);
 
@@ -137,7 +134,10 @@ fn stress_overlapping_sets_5000_docs() {
         "[overlap 5000] rounds={rounds}, bytes={bytes}, have={have}, need={need}, elapsed={elapsed:?}"
     );
 
-    assert!(have + need > 0, "Should find differences in overlapping sets");
+    assert!(
+        have + need > 0,
+        "Should find differences in overlapping sets"
+    );
     // O(log n): log2(5000) ~ 13
     assert!(rounds <= 25, "Too many rounds for 5000 docs: {rounds}");
 }
@@ -148,7 +148,10 @@ fn stress_scaling_behavior() {
     let sizes = [100, 500, 1_000, 5_000, 10_000];
 
     eprintln!("\n--- Negentropy scaling analysis ---");
-    eprintln!("{:<10} {:>8} {:>12} {:>10}", "docs", "rounds", "bytes", "time_ms");
+    eprintln!(
+        "{:<10} {:>8} {:>12} {:>10}",
+        "docs", "rounds", "bytes", "time_ms"
+    );
 
     let mut prev_rounds = 0u64;
     for &n in &sizes {
