@@ -8,6 +8,7 @@ pub mod traits;
 // Pure-generic storage types (no feature gate)
 pub mod blob_traits;
 pub mod geohash_index;
+pub mod streaming_transfer;
 pub mod ttl;
 
 // Automerge backend storage (ADR-049 Phase 3)
@@ -52,6 +53,7 @@ pub use blob_traits::{
     BlobToken, SharedBlobStore,
 };
 pub use geohash_index::GeohashIndex;
+pub use streaming_transfer::{StreamingTransferConfig, TransferCheckpoint, TransferResult};
 pub use traits::{Collection, DocumentPredicate, StorageBackend};
 pub use ttl::{EvictionStrategy, OfflineRetentionPolicy, TtlConfig};
 
