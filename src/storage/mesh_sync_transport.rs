@@ -20,6 +20,9 @@ use tracing::{debug, info, warn};
 
 use super::automerge_sync::AutomergeSyncCoordinator;
 use super::sync_transport::SyncTransport;
+use crate::security::formation_key::{
+    FormationAuthResult, FormationChallenge, FormationChallengeResponse, FormationKey,
+};
 
 // ────────────────────────────────────────────────────────────────────────────
 // MeshSyncTransport
@@ -159,11 +162,17 @@ impl SyncTransport for MeshSyncTransport {
 pub struct SyncProtocolHandler {
     transport: Arc<MeshSyncTransport>,
     coordinator: Arc<AutomergeSyncCoordinator>,
+    /// Optional formation key for peer authentication.
+    /// When set, incoming connections must pass HMAC challenge-response
+    /// before sync streams are accepted.
+    formation_key: Option<FormationKey>,
 }
 
 impl fmt::Debug for SyncProtocolHandler {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("SyncProtocolHandler").finish()
+        f.debug_struct("SyncProtocolHandler")
+            .field("has_formation_key", &self.formation_key.is_some())
+            .finish()
     }
 }
 
@@ -175,6 +184,24 @@ impl SyncProtocolHandler {
         Self {
             transport,
             coordinator,
+            formation_key: None,
+        }
+    }
+
+    /// Create a handler with formation key authentication enabled.
+    ///
+    /// When a formation key is set, incoming connections must pass an
+    /// HMAC-SHA256 challenge-response handshake before sync begins.
+    /// Connections that fail authentication are rejected.
+    pub fn with_formation_key(
+        transport: Arc<MeshSyncTransport>,
+        coordinator: Arc<AutomergeSyncCoordinator>,
+        formation_key: FormationKey,
+    ) -> Self {
+        Self {
+            transport,
+            coordinator,
+            formation_key: Some(formation_key),
         }
     }
 }
@@ -182,17 +209,85 @@ impl SyncProtocolHandler {
 impl iroh::protocol::ProtocolHandler for SyncProtocolHandler {
     /// Handle an incoming QUIC connection on the `CAP_AUTOMERGE_ALPN` ALPN.
     ///
-    /// Delegates to [`MeshSyncTransport::start_sync_connection`] which stores
-    /// the connection and spawns a full-duplex accept loop for sync streams.
+    /// If a formation key is configured, runs HMAC-SHA256 challenge-response
+    /// authentication before accepting sync streams. Unauthenticated connections
+    /// are rejected.
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
-        info!(
-            peer = %connection.remote_id().fmt_short(),
-            "Accepted incoming sync connection"
-        );
+        let peer = connection.remote_id();
+
+        // Formation key authentication
+        if let Some(ref fk) = self.formation_key {
+            match Self::run_formation_auth(fk, &connection).await {
+                Ok(()) => {
+                    info!(peer = %peer.fmt_short(), "peer authenticated via formation key");
+                }
+                Err(e) => {
+                    warn!(
+                        peer = %peer.fmt_short(),
+                        error = %e,
+                        "peer failed formation key authentication, rejecting"
+                    );
+                    connection.close(1u32.into(), b"formation auth failed");
+                    return Ok(());
+                }
+            }
+        } else {
+            info!(
+                peer = %peer.fmt_short(),
+                "accepted sync connection (no formation key configured)"
+            );
+        }
 
         self.transport
             .start_sync_connection(connection, self.coordinator.clone());
 
         Ok(())
+    }
+}
+
+impl SyncProtocolHandler {
+    /// Run formation key challenge-response on a QUIC connection.
+    ///
+    /// Opens a bidirectional stream, sends a challenge nonce, reads the
+    /// HMAC response, and verifies it. Returns Ok(()) on success.
+    async fn run_formation_auth(fk: &FormationKey, connection: &Connection) -> anyhow::Result<()> {
+        let (mut send, mut recv) = connection.open_bi().await?;
+
+        // Send challenge
+        let (nonce, _expected) = fk.create_challenge();
+        let challenge = FormationChallenge {
+            formation_id: fk.formation_id().to_string(),
+            nonce,
+        };
+        let challenge_bytes = challenge.to_bytes();
+        send.write_all(&(challenge_bytes.len() as u32).to_le_bytes())
+            .await?;
+        send.write_all(&challenge_bytes).await?;
+
+        // Read response
+        let mut len_buf = [0u8; 4];
+        recv.read_exact(&mut len_buf).await?;
+        let resp_len = u32::from_le_bytes(len_buf) as usize;
+        if resp_len > 256 {
+            anyhow::bail!("response too large: {resp_len}");
+        }
+        let mut resp_buf = vec![0u8; resp_len];
+        recv.read_exact(&mut resp_buf).await?;
+
+        let resp = FormationChallengeResponse::from_bytes(&resp_buf)
+            .map_err(|e| anyhow::anyhow!("invalid response: {e}"))?;
+
+        // Verify
+        if fk.verify_response(&nonce, &resp.response) {
+            send.write_all(&[FormationAuthResult::Accepted.to_byte()])
+                .await?;
+            send.finish()?;
+            Ok(())
+        } else {
+            send.write_all(&[FormationAuthResult::Rejected.to_byte()])
+                .await?;
+            send.finish()?;
+            anyhow::bail!("HMAC verification failed")
+        }
     }
 }
