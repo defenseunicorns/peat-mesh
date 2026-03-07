@@ -10,12 +10,12 @@ use std::time::{Duration, Instant};
 use async_trait::async_trait;
 use tokio::sync::mpsc;
 
+use peat_mesh::transport::reconnection::{ReconnectionManager, ReconnectionPolicy};
 use peat_mesh::transport::{
     HealthMonitor, HeartbeatConfig, MeshConnection, MeshTransport, NodeId, PeerEventReceiver,
     Transport, TransportCapabilities, TransportInstance, TransportManager, TransportManagerConfig,
     TransportPolicy, TransportType,
 };
-use peat_mesh::transport::reconnection::{ReconnectionManager, ReconnectionPolicy};
 use peat_mesh::transport::{Result, TransportError};
 
 // =============================================================================
@@ -318,10 +318,7 @@ fn health_monitor_intermittent_connectivity() {
     monitor.record_pong_received(&peer, seq);
 
     let health = monitor.get_health(&peer).unwrap();
-    assert_eq!(
-        health.state,
-        peat_mesh::transport::ConnectionState::Healthy
-    );
+    assert_eq!(health.state, peat_mesh::transport::ConnectionState::Healthy);
 
     // Round 4+5: miss twice -> suspect
     monitor.record_ping_sent(&peer);
@@ -332,10 +329,7 @@ fn health_monitor_intermittent_connectivity() {
     monitor.check_timeouts();
 
     let health = monitor.get_health(&peer).unwrap();
-    assert_eq!(
-        health.state,
-        peat_mesh::transport::ConnectionState::Suspect
-    );
+    assert_eq!(health.state, peat_mesh::transport::ConnectionState::Suspect);
 }
 
 /// Health monitor: full lifecycle Healthy -> Suspect -> Dead
@@ -504,9 +498,7 @@ fn mass_disconnection_reconnection() {
         ..Default::default()
     });
 
-    let peers: Vec<NodeId> = (0..50)
-        .map(|i| NodeId::new(format!("kilo-{i}")))
-        .collect();
+    let peers: Vec<NodeId> = (0..50).map(|i| NodeId::new(format!("kilo-{i}"))).collect();
 
     for peer in &peers {
         manager.schedule_reconnect(peer.clone(), true);
@@ -548,7 +540,11 @@ fn total_isolation_all_transports_down() {
     ));
 
     manager.register_instance(
-        TransportInstance::new("quic-main", TransportType::Quic, quic.capabilities().clone()),
+        TransportInstance::new(
+            "quic-main",
+            TransportType::Quic,
+            quic.capabilities().clone(),
+        ),
         quic.clone() as Arc<dyn Transport>,
     );
     manager.register_instance(
