@@ -88,9 +88,12 @@ impl GeohashIndex {
 
         // Remove from old location if exists
         {
-            let mut doc_locs = self.doc_locations.write().unwrap();
+            let mut doc_locs = self
+                .doc_locations
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             if let Some(old_geohash) = doc_locs.remove(doc_id) {
-                let mut idx = self.index.write().unwrap();
+                let mut idx = self.index.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(cell) = idx.get_mut(&old_geohash) {
                     cell.remove(doc_id);
                     if cell.is_empty() {
@@ -102,13 +105,16 @@ impl GeohashIndex {
 
         // Insert at new location
         {
-            let mut idx = self.index.write().unwrap();
+            let mut idx = self.index.write().unwrap_or_else(|e| e.into_inner());
             idx.entry(geohash.clone())
                 .or_default()
                 .insert(doc_id.to_string());
         }
         {
-            let mut doc_locs = self.doc_locations.write().unwrap();
+            let mut doc_locs = self
+                .doc_locations
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             doc_locs.insert(doc_id.to_string(), geohash);
         }
 
@@ -132,7 +138,7 @@ impl GeohashIndex {
         let center_hash = self.encode(lat, lon)?;
         let neighbors = self.get_neighbors(&center_hash)?;
 
-        let idx = self.index.read().unwrap();
+        let idx = self.index.read().unwrap_or_else(|e| e.into_inner());
         let mut results = HashSet::new();
 
         // Include center cell
@@ -152,7 +158,7 @@ impl GeohashIndex {
 
     /// Find documents in a specific geohash cell only (no neighbors)
     pub fn find_in_cell(&self, geohash: &str) -> Vec<String> {
-        let idx = self.index.read().unwrap();
+        let idx = self.index.read().unwrap_or_else(|e| e.into_inner());
         idx.get(geohash)
             .map(|docs| docs.iter().cloned().collect())
             .unwrap_or_default()
@@ -168,9 +174,12 @@ impl GeohashIndex {
     ///
     /// Ok(true) if document was found and removed, Ok(false) if not found
     pub fn remove(&self, doc_id: &str) -> Result<bool> {
-        let mut doc_locs = self.doc_locations.write().unwrap();
+        let mut doc_locs = self
+            .doc_locations
+            .write()
+            .unwrap_or_else(|e| e.into_inner());
         if let Some(geohash) = doc_locs.remove(doc_id) {
-            let mut idx = self.index.write().unwrap();
+            let mut idx = self.index.write().unwrap_or_else(|e| e.into_inner());
             if let Some(cell) = idx.get_mut(&geohash) {
                 cell.remove(doc_id);
                 if cell.is_empty() {
@@ -200,17 +209,27 @@ impl GeohashIndex {
 
     /// Check if a document exists in the index
     pub fn contains(&self, doc_id: &str) -> bool {
-        self.doc_locations.read().unwrap().contains_key(doc_id)
+        self.doc_locations
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(doc_id)
     }
 
     /// Get the geohash cell for a document
     pub fn get_cell(&self, doc_id: &str) -> Option<String> {
-        self.doc_locations.read().unwrap().get(doc_id).cloned()
+        self.doc_locations
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(doc_id)
+            .cloned()
     }
 
     /// Count total documents in the index
     pub fn len(&self) -> usize {
-        self.doc_locations.read().unwrap().len()
+        self.doc_locations
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 
     /// Check if the index is empty
@@ -220,18 +239,29 @@ impl GeohashIndex {
 
     /// Count number of geohash cells with documents
     pub fn cell_count(&self) -> usize {
-        self.index.read().unwrap().len()
+        self.index.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     /// Clear all entries from the index
     pub fn clear(&self) {
-        self.index.write().unwrap().clear();
-        self.doc_locations.write().unwrap().clear();
+        self.index
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
+        self.doc_locations
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .clear();
     }
 
     /// Get all document IDs in the index
     pub fn all_doc_ids(&self) -> Vec<String> {
-        self.doc_locations.read().unwrap().keys().cloned().collect()
+        self.doc_locations
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .keys()
+            .cloned()
+            .collect()
     }
 
     /// Encode a coordinate to a geohash string

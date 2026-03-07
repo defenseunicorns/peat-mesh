@@ -244,12 +244,19 @@ impl PartitionDetector {
 
     /// Register a new peer for heartbeat tracking
     pub fn register_peer(&self, peer_id: EndpointId) {
-        self.heartbeats.write().unwrap().entry(peer_id).or_default();
+        self.heartbeats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(peer_id)
+            .or_default();
     }
 
     /// Remove a peer from heartbeat tracking
     pub fn unregister_peer(&self, peer_id: &EndpointId) {
-        self.heartbeats.write().unwrap().remove(peer_id);
+        self.heartbeats
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 
     /// Record a successful heartbeat for a peer
@@ -285,7 +292,11 @@ impl PartitionDetector {
 
     /// Get heartbeat info for a peer
     pub fn get_peer_heartbeat(&self, peer_id: &EndpointId) -> Option<PeerHeartbeat> {
-        self.heartbeats.read().unwrap().get(peer_id).cloned()
+        self.heartbeats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(peer_id)
+            .cloned()
     }
 
     /// Get all partitioned peers
@@ -305,7 +316,7 @@ impl PartitionDetector {
     pub fn check_timeouts(&self) -> Vec<PartitionEvent> {
         let mut events = Vec::new();
 
-        let mut heartbeats = self.heartbeats.write().unwrap();
+        let mut heartbeats = self.heartbeats.write().unwrap_or_else(|e| e.into_inner());
         for (peer_id, hb) in heartbeats.iter_mut() {
             if hb.state != PeerPartitionState::Partitioned
                 && hb.is_timeout(self.config.heartbeat_timeout)
@@ -331,7 +342,10 @@ impl PartitionDetector {
 
     /// Get number of tracked peers
     pub fn peer_count(&self) -> usize {
-        self.heartbeats.read().unwrap().len()
+        self.heartbeats
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .len()
     }
 }
 

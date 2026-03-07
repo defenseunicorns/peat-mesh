@@ -579,7 +579,7 @@ impl LiteMeshTransport {
     where
         F: Fn(&str, &str, CrdtType, &[u8]) + Send + Sync + 'static,
     {
-        let mut cb = self.crdt_callback.lock().unwrap();
+        let mut cb = self.crdt_callback.lock().unwrap_or_else(|e| e.into_inner());
         *cb = Some(Box::new(callback));
     }
 
@@ -591,7 +591,10 @@ impl LiteMeshTransport {
     where
         F: Fn(&QueryRequest) -> Option<Vec<u8>> + Send + Sync + 'static,
     {
-        let mut cb = self.query_callback.lock().unwrap();
+        let mut cb = self
+            .query_callback
+            .lock()
+            .unwrap_or_else(|e| e.into_inner());
         *cb = Some(Box::new(callback));
     }
 
@@ -602,7 +605,7 @@ impl LiteMeshTransport {
     where
         F: Fn(&str, MessageType, &[u8]) + Send + Sync + 'static,
     {
-        let mut cb = self.ota_callback.lock().unwrap();
+        let mut cb = self.ota_callback.lock().unwrap_or_else(|e| e.into_inner());
         *cb = Some(Box::new(callback));
     }
 
@@ -628,11 +631,11 @@ impl LiteMeshTransport {
         let socket = socket_guard.as_ref().ok_or(TransportError::NotStarted)?;
 
         let addr = {
-            let peers = self.peers.read().unwrap();
+            let peers = self.peers.read().unwrap_or_else(|e| e.into_inner());
             let peer_state = peers
                 .get(peer_id.as_str())
                 .ok_or_else(|| TransportError::PeerNotFound(peer_id.to_string()))?;
-            let addr = peer_state.read().unwrap().address;
+            let addr = peer_state.read().unwrap_or_else(|e| e.into_inner()).address;
             addr
         };
 
@@ -648,7 +651,7 @@ impl LiteMeshTransport {
 
     /// Send peer event to all subscribers
     fn send_event(&self, event: PeerEvent) {
-        let senders = self.event_senders.lock().unwrap();
+        let senders = self.event_senders.lock().unwrap_or_else(|e| e.into_inner());
         for sender in senders.iter() {
             let _ = sender.try_send(event.clone());
         }
@@ -666,11 +669,11 @@ impl LiteMeshTransport {
 
         // Update or create peer state
         let is_new_peer = {
-            let mut peers = self.peers.write().unwrap();
+            let mut peers = self.peers.write().unwrap_or_else(|e| e.into_inner());
 
             if let Some(peer_state) = peers.get(&node_id_str) {
                 // Update existing peer
-                let mut state = peer_state.write().unwrap();
+                let mut state = peer_state.write().unwrap_or_else(|e| e.into_inner());
                 state.last_seen = Instant::now();
                 state.last_seq = msg.seq_num;
                 state.address = src;
@@ -736,7 +739,12 @@ impl LiteMeshTransport {
                         );
 
                         // Call CRDT callback if set
-                        if let Some(callback) = self.crdt_callback.lock().unwrap().as_ref() {
+                        if let Some(callback) = self
+                            .crdt_callback
+                            .lock()
+                            .unwrap_or_else(|e| e.into_inner())
+                            .as_ref()
+                        {
                             // Use node_id as doc_id, "lite_sensors" as collection
                             callback("lite_sensors", &node_id_str, crdt_type, crdt_data);
                         }
@@ -746,9 +754,9 @@ impl LiteMeshTransport {
             MessageType::Leave => {
                 log::info!("LEAVE from {}", node_id_str);
                 // Remove peer and emit disconnected event
-                let mut peers = self.peers.write().unwrap();
+                let mut peers = self.peers.write().unwrap_or_else(|e| e.into_inner());
                 if let Some(peer_state) = peers.remove(&node_id_str) {
-                    let state = peer_state.read().unwrap();
+                    let state = peer_state.read().unwrap_or_else(|e| e.into_inner());
                     self.send_event(PeerEvent::Disconnected {
                         peer_id: node_id,
                         reason: DisconnectReason::RemoteClosed,
@@ -765,7 +773,12 @@ impl LiteMeshTransport {
                         request.collection,
                     );
 
-                    if let Some(callback) = self.query_callback.lock().unwrap().as_ref() {
+                    if let Some(callback) = self
+                        .query_callback
+                        .lock()
+                        .unwrap_or_else(|e| e.into_inner())
+                        .as_ref()
+                    {
                         if let Some(_response) = callback(&request) {
                             // Response would be sent back via send_to in a real async context.
                             // For now, the callback handles the response externally.
@@ -780,7 +793,12 @@ impl LiteMeshTransport {
             | MessageType::OtaResult
             | MessageType::OtaAbort => {
                 log::debug!("OTA message {:?} from {}", msg.msg_type, node_id_str);
-                if let Some(callback) = self.ota_callback.lock().unwrap().as_ref() {
+                if let Some(callback) = self
+                    .ota_callback
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .as_ref()
+                {
                     callback(&node_id_str, msg.msg_type, &msg.payload);
                 }
             }
@@ -797,11 +815,11 @@ impl LiteMeshTransport {
     /// Check for stale peers and emit disconnect events
     fn check_stale_peers(&self) {
         let timeout = Duration::from_secs(self.config.peer_timeout_secs);
-        let mut peers = self.peers.write().unwrap();
+        let mut peers = self.peers.write().unwrap_or_else(|e| e.into_inner());
 
         let mut stale_peers = Vec::new();
         for (id, state) in peers.iter() {
-            let state = state.read().unwrap();
+            let state = state.read().unwrap_or_else(|e| e.into_inner());
             if state.last_seen.elapsed() > timeout {
                 stale_peers.push((id.clone(), state.connected_at.elapsed()));
             }
@@ -841,7 +859,7 @@ impl MeshTransport for LiteMeshTransport {
         }
 
         {
-            let mut running = self.running.write().unwrap();
+            let mut running = self.running.write().unwrap_or_else(|e| e.into_inner());
             *running = true;
         }
 
@@ -874,7 +892,7 @@ impl MeshTransport for LiteMeshTransport {
 
             loop {
                 // Check if still running
-                if !*running.read().unwrap() {
+                if !*running.read().unwrap_or_else(|e| e.into_inner()) {
                     break;
                 }
 
@@ -912,7 +930,7 @@ impl MeshTransport for LiteMeshTransport {
 
     async fn stop(&self) -> Result<()> {
         {
-            let mut running = self.running.write().unwrap();
+            let mut running = self.running.write().unwrap_or_else(|e| e.into_inner());
             *running = false;
         }
 
@@ -930,10 +948,10 @@ impl MeshTransport for LiteMeshTransport {
         // For Lite transport, connections are created implicitly when we receive messages
         // This method can be used to "expect" a connection from a known peer
 
-        let peers = self.peers.read().unwrap();
+        let peers = self.peers.read().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = peers.get(peer_id.as_str()) {
             let state_clone = state.clone();
-            let connected_at = state.read().unwrap().connected_at;
+            let connected_at = state.read().unwrap_or_else(|e| e.into_inner()).connected_at;
             Ok(Box::new(LiteConnection {
                 node_id: peer_id.clone(),
                 state: state_clone,
@@ -945,9 +963,9 @@ impl MeshTransport for LiteMeshTransport {
     }
 
     async fn disconnect(&self, peer_id: &NodeId) -> Result<()> {
-        let mut peers = self.peers.write().unwrap();
+        let mut peers = self.peers.write().unwrap_or_else(|e| e.into_inner());
         if let Some(state) = peers.remove(peer_id.as_str()) {
-            let state = state.read().unwrap();
+            let state = state.read().unwrap_or_else(|e| e.into_inner());
             self.send_event(PeerEvent::Disconnected {
                 peer_id: peer_id.clone(),
                 reason: DisconnectReason::LocalClosed,
@@ -960,9 +978,9 @@ impl MeshTransport for LiteMeshTransport {
     }
 
     fn get_connection(&self, peer_id: &NodeId) -> Option<Box<dyn MeshConnection>> {
-        let peers = self.peers.read().unwrap();
+        let peers = self.peers.read().unwrap_or_else(|e| e.into_inner());
         peers.get(peer_id.as_str()).map(|state| {
-            let connected_at = state.read().unwrap().connected_at;
+            let connected_at = state.read().unwrap_or_else(|e| e.into_inner()).connected_at;
             Box::new(LiteConnection {
                 node_id: peer_id.clone(),
                 state: state.clone(),
@@ -972,7 +990,7 @@ impl MeshTransport for LiteMeshTransport {
     }
 
     fn peer_count(&self) -> usize {
-        self.peers.read().unwrap().len()
+        self.peers.read().unwrap_or_else(|e| e.into_inner()).len()
     }
 
     fn connected_peers(&self) -> Vec<NodeId> {
@@ -989,10 +1007,10 @@ impl MeshTransport for LiteMeshTransport {
         let socket = socket_guard.as_ref().ok_or(TransportError::NotStarted)?;
 
         let addr = {
-            let peers = self.peers.read().unwrap();
+            let peers = self.peers.read().unwrap_or_else(|e| e.into_inner());
             match peers.get(peer_id.as_str()) {
                 Some(peer_state) => {
-                    let addr = peer_state.read().unwrap().address;
+                    let addr = peer_state.read().unwrap_or_else(|e| e.into_inner()).address;
                     addr
                 }
                 None => return Err(TransportError::PeerNotFound(peer_id.to_string())),
@@ -1009,14 +1027,17 @@ impl MeshTransport for LiteMeshTransport {
 
     fn subscribe_peer_events(&self) -> PeerEventReceiver {
         let (tx, rx) = mpsc::channel(PEER_EVENT_CHANNEL_CAPACITY);
-        self.event_senders.lock().unwrap().push(tx);
+        self.event_senders
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(tx);
         rx
     }
 
     fn get_peer_health(&self, peer_id: &NodeId) -> Option<ConnectionHealth> {
-        let peers = self.peers.read().unwrap();
+        let peers = self.peers.read().unwrap_or_else(|e| e.into_inner());
         peers.get(peer_id.as_str()).map(|state| {
-            let state = state.read().unwrap();
+            let state = state.read().unwrap_or_else(|e| e.into_inner());
             ConnectionHealth {
                 rtt_ms: 0, // UDP doesn't track RTT
                 rtt_variance_ms: 0,
@@ -1888,7 +1909,7 @@ mod tests {
         let called_clone = called.clone();
 
         transport.set_query_callback(move |req: &QueryRequest| {
-            *called_clone.lock().unwrap() = true;
+            *called_clone.lock().unwrap_or_else(|e| e.into_inner()) = true;
             assert_eq!(req.collection, "sensors");
             Some(vec![1, 2, 3])
         });
@@ -1904,6 +1925,6 @@ mod tests {
         let src_addr: SocketAddr = "192.168.1.100:5555".parse().unwrap();
         transport.handle_message(msg, src_addr);
 
-        assert!(*called.lock().unwrap());
+        assert!(*called.lock().unwrap_or_else(|e| e.into_inner()));
     }
 }

@@ -396,7 +396,7 @@ mod tests {
         }
 
         fn insert(&self, collection: &str, doc: Document) {
-            let mut docs = self.docs.lock().unwrap();
+            let mut docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
             docs.entry(collection.to_string()).or_default().push(doc);
         }
     }
@@ -412,7 +412,7 @@ mod tests {
         }
 
         async fn query(&self, collection: &str, query: &Query) -> anyhow::Result<Vec<Document>> {
-            let docs = self.docs.lock().unwrap();
+            let docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
             let col = docs.get(collection).cloned().unwrap_or_default();
             match query {
                 Query::All => Ok(col),
@@ -431,7 +431,7 @@ mod tests {
         }
 
         async fn remove(&self, collection: &str, doc_id: &DocumentId) -> anyhow::Result<()> {
-            let mut docs = self.docs.lock().unwrap();
+            let mut docs = self.docs.lock().unwrap_or_else(|e| e.into_inner());
             if let Some(col) = docs.get_mut(collection) {
                 col.retain(|d| d.id.as_deref() != Some(doc_id.as_str()));
             }

@@ -282,13 +282,13 @@ impl NegentropySync {
 
         // Store session
         {
-            let mut sessions = self.sessions.write().unwrap();
+            let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
             sessions.insert(peer_id, session);
         }
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.sessions_initiated += 1;
             stats.bytes_exchanged += init_msg.len() as u64;
         }
@@ -312,7 +312,7 @@ impl NegentropySync {
         message: &[u8],
         local_items: Vec<SyncItem>,
     ) -> Result<ReconcileResult> {
-        let mut sessions = self.sessions.write().unwrap();
+        let mut sessions = self.sessions.write().unwrap_or_else(|e| e.into_inner());
 
         let session = if let Some(existing) = sessions.get_mut(&peer_id) {
             existing
@@ -327,7 +327,7 @@ impl NegentropySync {
 
         // Update stats
         {
-            let mut stats = self.stats.write().unwrap();
+            let mut stats = self.stats.write().unwrap_or_else(|e| e.into_inner());
             stats.bytes_exchanged += message.len() as u64;
             stats.round_trips += 1;
             if let Some(next) = &result.next_message {
@@ -356,17 +356,23 @@ impl NegentropySync {
 
     /// Get current statistics
     pub fn stats(&self) -> NegentropyStats {
-        self.stats.read().unwrap().clone()
+        self.stats.read().unwrap_or_else(|e| e.into_inner()).clone()
     }
 
     /// Check if there's an active session with a peer
     pub fn has_session(&self, peer_id: &EndpointId) -> bool {
-        self.sessions.read().unwrap().contains_key(peer_id)
+        self.sessions
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .contains_key(peer_id)
     }
 
     /// Cancel a sync session
     pub fn cancel_session(&self, peer_id: &EndpointId) {
-        self.sessions.write().unwrap().remove(peer_id);
+        self.sessions
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(peer_id);
     }
 }
 

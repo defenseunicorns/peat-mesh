@@ -225,7 +225,7 @@ impl AutomergeStore {
     pub fn get(&self, key: &str) -> Result<Option<Automerge>> {
         // Always check cache first
         {
-            let mut cache = self.cache.write().unwrap();
+            let mut cache = self.cache.write().unwrap_or_else(|e| e.into_inner());
             if let Some(doc) = cache.get(key) {
                 return Ok(Some(doc.clone()));
             }
@@ -275,7 +275,10 @@ impl AutomergeStore {
             write_txn.commit().context("Failed to commit delete")?;
         }
 
-        self.cache.write().unwrap().pop(key);
+        self.cache
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .pop(key);
         Ok(())
     }
 
@@ -283,7 +286,7 @@ impl AutomergeStore {
     pub fn scan_prefix(&self, prefix: &str) -> Result<Vec<(String, Automerge)>> {
         // In memory-only mode, scan the cache
         if self.db.is_none() {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             let results: Vec<(String, Automerge)> = cache
                 .iter()
                 .filter(|(k, _)| k.starts_with(prefix))
@@ -327,7 +330,7 @@ impl AutomergeStore {
     pub fn count(&self) -> usize {
         // In memory-only mode, count cache entries
         let Some(ref db) = self.db else {
-            return self.cache.read().unwrap().len();
+            return self.cache.read().unwrap_or_else(|e| e.into_inner()).len();
         };
 
         let read_txn = match db.begin_read() {
@@ -553,7 +556,7 @@ impl AutomergeStore {
 
         // In memory-only mode, scan the cache
         if self.db.is_none() {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             for key in cache.iter().map(|(k, _)| k) {
                 if let Some(colon_pos) = key.find(':') {
                     let collection = &key[..colon_pos];
@@ -754,7 +757,7 @@ impl AutomergeStore {
         // In memory-only mode, iterate cache
         if self.db.is_none() {
             let keys: Vec<String> = {
-                let cache = self.cache.read().unwrap();
+                let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
                 cache.iter().map(|(k, _)| k.clone()).collect()
             };
 
@@ -885,7 +888,7 @@ impl AutomergeStore {
     /// List all document keys in the store.
     fn all_keys(&self) -> Result<Vec<String>> {
         if self.db.is_none() {
-            let cache = self.cache.read().unwrap();
+            let cache = self.cache.read().unwrap_or_else(|e| e.into_inner());
             return Ok(cache.iter().map(|(k, _)| k.clone()).collect());
         }
 

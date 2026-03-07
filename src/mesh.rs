@@ -190,7 +190,7 @@ impl PeatMesh {
 
     /// Start the mesh (Created/Stopped → Starting → Running).
     pub fn start(&self) -> Result<(), MeshError> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
         match *state {
             MeshState::Created | MeshState::Stopped => {}
             MeshState::Running | MeshState::Starting | MeshState::Stopping => {
@@ -204,7 +204,7 @@ impl PeatMesh {
             .send(PeatMeshEvent::StateChanged(MeshState::Starting));
 
         *state = MeshState::Running;
-        *self.started_at.write().unwrap() = Some(Instant::now());
+        *self.started_at.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
         let _ = self
             .event_tx
             .send(PeatMeshEvent::StateChanged(MeshState::Running));
@@ -220,7 +220,7 @@ impl PeatMesh {
 
     /// Stop the mesh (Running → Stopping → Stopped).
     pub fn stop(&self) -> Result<(), MeshError> {
-        let mut state = self.state.write().unwrap();
+        let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
         match *state {
             MeshState::Running => {}
             _ => return Err(MeshError::NotRunning),
@@ -247,12 +247,12 @@ impl PeatMesh {
 
     /// Get the current lifecycle state.
     pub fn state(&self) -> MeshState {
-        *self.state.read().unwrap()
+        *self.state.read().unwrap_or_else(|e| e.into_inner())
     }
 
     /// Get a point-in-time status snapshot.
     pub fn status(&self) -> MeshStatus {
-        let state = *self.state.read().unwrap();
+        let state = *self.state.read().unwrap_or_else(|e| e.into_inner());
         let uptime = self
             .started_at
             .read()
@@ -371,7 +371,7 @@ impl PeatMesh {
     /// mutability (`RwLock`) — `DiscoveryStrategy::start()` requires
     /// `&mut self`.
     pub fn set_discovery(&self, strategy: Box<dyn crate::discovery::DiscoveryStrategy>) {
-        *self.discovery.write().unwrap() = Some(strategy);
+        *self.discovery.write().unwrap_or_else(|e| e.into_inner()) = Some(strategy);
     }
 
     /// Get a reference to the discovery RwLock.
@@ -1394,7 +1394,11 @@ mod tests {
     #[test]
     fn test_discovery_initially_none() {
         let mesh = PeatMesh::new(MeshConfig::default());
-        assert!(mesh.discovery().read().unwrap().is_none());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_none());
     }
 
     #[test]
@@ -1402,7 +1406,11 @@ mod tests {
         let mesh = PeatMesh::new(MeshConfig::default());
         let strategy = crate::discovery::HybridDiscovery::new();
         mesh.set_discovery(Box::new(strategy));
-        assert!(mesh.discovery().read().unwrap().is_some());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
     }
 
     #[test]
@@ -1411,7 +1419,11 @@ mod tests {
         let mesh = PeatMeshBuilder::new(MeshConfig::default())
             .with_discovery(Box::new(strategy))
             .build();
-        assert!(mesh.discovery().read().unwrap().is_some());
+        assert!(mesh
+            .discovery()
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some());
     }
 
     // ── Gap 2: Beacon system ───────────────────────────────────────

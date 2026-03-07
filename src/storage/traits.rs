@@ -330,16 +330,27 @@ mod tests {
 
     impl Collection for InMemCollection {
         fn upsert(&self, doc_id: &str, data: Vec<u8>) -> Result<()> {
-            self.data.write().unwrap().insert(doc_id.to_string(), data);
+            self.data
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .insert(doc_id.to_string(), data);
             Ok(())
         }
 
         fn get(&self, doc_id: &str) -> Result<Option<Vec<u8>>> {
-            Ok(self.data.read().unwrap().get(doc_id).cloned())
+            Ok(self
+                .data
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .get(doc_id)
+                .cloned())
         }
 
         fn delete(&self, doc_id: &str) -> Result<()> {
-            self.data.write().unwrap().remove(doc_id);
+            self.data
+                .write()
+                .unwrap_or_else(|e| e.into_inner())
+                .remove(doc_id);
             Ok(())
         }
 
@@ -376,7 +387,7 @@ mod tests {
         }
 
         fn count(&self) -> Result<usize> {
-            Ok(self.data.read().unwrap().len())
+            Ok(self.data.read().unwrap_or_else(|e| e.into_inner()).len())
         }
     }
 
@@ -482,14 +493,19 @@ mod tests {
 
     impl StorageBackend for InMemBackend {
         fn collection(&self, name: &str) -> Arc<dyn Collection> {
-            let mut cols = self.collections.write().unwrap();
+            let mut cols = self.collections.write().unwrap_or_else(|e| e.into_inner());
             cols.entry(name.to_string())
                 .or_insert_with(|| Arc::new(InMemCollection::new()))
                 .clone()
         }
 
         fn list_collections(&self) -> Vec<String> {
-            self.collections.read().unwrap().keys().cloned().collect()
+            self.collections
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .keys()
+                .cloned()
+                .collect()
         }
 
         fn flush(&self) -> Result<()> {

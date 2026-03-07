@@ -212,7 +212,10 @@ impl SyncModeRegistry {
         ];
 
         {
-            let mut overrides = registry.overrides.write().unwrap();
+            let mut overrides = registry
+                .overrides
+                .write()
+                .unwrap_or_else(|e| e.into_inner());
             for (collection, mode) in defaults {
                 overrides.insert(collection.to_string(), mode);
             }
@@ -243,12 +246,18 @@ impl SyncModeRegistry {
 
     /// Remove a collection override (will use default)
     pub fn remove(&self, collection: &str) -> Option<SyncMode> {
-        self.overrides.write().unwrap().remove(collection)
+        self.overrides
+            .write()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(collection)
     }
 
     /// Get all configured overrides
     pub fn all_overrides(&self) -> HashMap<String, SyncMode> {
-        self.overrides.read().unwrap().clone()
+        self.overrides
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone()
     }
 
     /// Check if a collection is configured for LatestOnly mode
@@ -269,7 +278,12 @@ impl SyncModeRegistry {
 impl Clone for SyncModeRegistry {
     fn clone(&self) -> Self {
         Self {
-            overrides: RwLock::new(self.overrides.read().unwrap().clone()),
+            overrides: RwLock::new(
+                self.overrides
+                    .read()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .clone(),
+            ),
         }
     }
 }
