@@ -825,6 +825,92 @@ impl AutomergeStore {
         Ok((count, total_before, total_after))
     }
 
+    /// Start a background task that periodically compacts documents exceeding
+    /// a size threshold.
+    ///
+    /// - `interval`: How often to run compaction (default: 5 minutes)
+    /// - `size_threshold_bytes`: Only compact documents larger than this (default: 64 KiB)
+    ///
+    /// This prevents unbounded Automerge history growth on long-running nodes.
+    pub fn start_background_compaction(
+        self: &Arc<Self>,
+        interval: std::time::Duration,
+        size_threshold_bytes: usize,
+    ) {
+        let store = Arc::clone(self);
+        tokio::spawn(async move {
+            let mut timer = tokio::time::interval(interval);
+            // Don't run immediately on startup
+            timer.tick().await;
+
+            loop {
+                timer.tick().await;
+                match store.compact_above_threshold(size_threshold_bytes) {
+                    Ok((count, before, after)) => {
+                        if count > 0 {
+                            tracing::info!(count, before, after, "background compaction complete");
+                        }
+                    }
+                    Err(e) => {
+                        tracing::warn!("background compaction failed: {e}");
+                    }
+                }
+            }
+        });
+    }
+
+    /// Compact only documents exceeding a size threshold.
+    ///
+    /// Returns `(documents_compacted, total_bytes_before, total_bytes_after)`.
+    pub fn compact_above_threshold(&self, threshold_bytes: usize) -> Result<(usize, usize, usize)> {
+        let keys = self.all_keys()?;
+        let mut count = 0;
+        let mut total_before = 0;
+        let mut total_after = 0;
+
+        for key in keys {
+            let size = self.document_size(&key)?.unwrap_or(0);
+            if size >= threshold_bytes {
+                if let Some((before, after)) = self.compact(&key)? {
+                    count += 1;
+                    total_before += before;
+                    total_after += after;
+                }
+            }
+        }
+
+        Ok((count, total_before, total_after))
+    }
+
+    /// List all document keys in the store.
+    fn all_keys(&self) -> Result<Vec<String>> {
+        if self.db.is_none() {
+            let cache = self.cache.read().unwrap();
+            return Ok(cache.iter().map(|(k, _)| k.clone()).collect());
+        }
+
+        let read_txn = self
+            .db
+            .as_ref()
+            .unwrap()
+            .begin_read()
+            .context("Failed to begin read transaction")?;
+        let table = read_txn
+            .open_table(DOCUMENTS_TABLE)
+            .context("Failed to open documents table")?;
+
+        let keys: Vec<String> = table
+            .iter()?
+            .filter_map(|entry| {
+                entry
+                    .ok()
+                    .map(|(k, _)| String::from_utf8_lossy(k.value()).to_string())
+            })
+            .collect();
+
+        Ok(keys)
+    }
+
     /// Get a typed collection handle for serde-based access.
     ///
     /// Returns a `TypedCollection<T>` that provides automatic serde
@@ -1323,5 +1409,47 @@ mod tests {
         let loaded = store.get("test-doc").unwrap().unwrap();
         let value = loaded.get(automerge::ROOT, "counter").unwrap().unwrap();
         assert_eq!(value.0.to_i64(), Some(99));
+    }
+
+    #[test]
+    fn test_compact_above_threshold() {
+        let store = Arc::new(AutomergeStore::in_memory());
+
+        // Create a small document (below threshold)
+        let mut small_doc = Automerge::new();
+        small_doc
+            .transact::<_, _, automerge::AutomergeError>(|tx| {
+                tx.put(automerge::ROOT, "key", "value")?;
+                Ok(())
+            })
+            .unwrap();
+        store.put("small-doc", &small_doc).unwrap();
+
+        // Create a large document with lots of history
+        let mut big_doc = Automerge::new();
+        for i in 0..200 {
+            big_doc
+                .transact::<_, _, automerge::AutomergeError>(|tx| {
+                    tx.put(automerge::ROOT, "counter", i as i64)?;
+                    Ok(())
+                })
+                .unwrap();
+        }
+        let big_size = big_doc.save().len();
+        store.put("big-doc", &big_doc).unwrap();
+
+        // Compact with threshold above small doc size but below big doc
+        let small_size = small_doc.save().len();
+        let threshold = small_size + 1;
+        let (count, before, after) = store.compact_above_threshold(threshold).unwrap();
+
+        // Only the big doc should have been compacted (small is below threshold)
+        assert_eq!(count, 1);
+        assert!(before >= after, "compaction should not increase size");
+
+        // Verify the big doc value is preserved
+        let loaded = store.get("big-doc").unwrap().unwrap();
+        let value = loaded.get(automerge::ROOT, "counter").unwrap().unwrap();
+        assert_eq!(value.0.to_i64(), Some(199));
     }
 }
