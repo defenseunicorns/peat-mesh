@@ -244,7 +244,10 @@ where
         checkpoint.chunks_completed += 1;
 
         // Periodic checkpoint
-        if checkpoint.chunks_completed.is_multiple_of(config.checkpoint_interval as u64) {
+        if checkpoint
+            .chunks_completed
+            .is_multiple_of(config.checkpoint_interval as u64)
+        {
             if let Some(ref mut cb) = on_checkpoint {
                 cb(checkpoint)?;
                 checkpoints_saved += 1;
