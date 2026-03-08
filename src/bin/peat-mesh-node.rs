@@ -102,6 +102,7 @@ async fn run() -> anyhow::Result<()> {
             bind_addr: Some(SocketAddr::from(([0, 0, 0, 0], iroh_bind_port))),
             relay_urls,
             secret_key: Some(iroh_key),
+            ..Default::default()
         },
         ..Default::default()
     };
