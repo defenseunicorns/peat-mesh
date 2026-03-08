@@ -113,10 +113,24 @@ impl SyncChannel {
     /// Create a new sync channel to a peer
     ///
     /// Opens a bidirectional stream and spawns a receiver task.
+    /// An optional [`CancellationToken`](tokio_util::sync::CancellationToken)
+    /// can be provided; when cancelled, the receive loop exits promptly.
     pub async fn connect(
         transport: Arc<dyn SyncTransport>,
         peer_id: EndpointId,
         coordinator: Arc<AutomergeSyncCoordinator>,
+    ) -> Result<Self> {
+        Self::connect_with_token(transport, peer_id, coordinator, None).await
+    }
+
+    /// Create a new sync channel to a peer with an explicit cancellation token.
+    ///
+    /// See [`connect`](Self::connect) for details.
+    pub async fn connect_with_token(
+        transport: Arc<dyn SyncTransport>,
+        peer_id: EndpointId,
+        coordinator: Arc<AutomergeSyncCoordinator>,
+        cancel: Option<tokio_util::sync::CancellationToken>,
     ) -> Result<Self> {
         // Get connection to peer
         let conn = transport
@@ -142,14 +156,19 @@ impl SyncChannel {
         };
 
         // Spawn receiver task
-        channel.spawn_receiver(recv, coordinator);
+        channel.spawn_receiver(recv, coordinator, cancel);
 
         tracing::debug!("Sync channel connected to peer {:?}", peer_id);
         Ok(channel)
     }
 
     /// Spawn the inbound receiver task
-    fn spawn_receiver(&self, recv: RecvStream, coordinator: Arc<AutomergeSyncCoordinator>) {
+    fn spawn_receiver(
+        &self,
+        recv: RecvStream,
+        coordinator: Arc<AutomergeSyncCoordinator>,
+        cancel: Option<tokio_util::sync::CancellationToken>,
+    ) {
         let peer_id = self.peer_id;
         let state = Arc::clone(&self.state);
         let recv_task = Arc::clone(&self.recv_task);
@@ -157,7 +176,7 @@ impl SyncChannel {
         let task = tokio::spawn(async move {
             tracing::debug!("Sync channel receiver started for peer {:?}", peer_id);
 
-            if let Err(e) = Self::receive_loop(recv, peer_id, coordinator).await {
+            if let Err(e) = Self::receive_loop(recv, peer_id, coordinator, cancel).await {
                 tracing::warn!(
                     "Sync channel receiver for peer {:?} ended with error: {}",
                     peer_id,
@@ -177,15 +196,43 @@ impl SyncChannel {
     }
 
     /// Main receive loop - processes incoming batches
+    ///
+    /// When a cancellation token is provided, the loop checks it before each
+    /// read and races the token against the receive timeout so that shutdown
+    /// is observed promptly.
     async fn receive_loop(
         mut recv: RecvStream,
         peer_id: EndpointId,
         coordinator: Arc<AutomergeSyncCoordinator>,
+        cancel: Option<tokio_util::sync::CancellationToken>,
     ) -> Result<()> {
         loop {
-            // Read message type marker
+            // Exit immediately if cancellation has been requested.
+            if let Some(ref token) = cancel {
+                if token.is_cancelled() {
+                    tracing::debug!("Sync channel receive loop for peer {:?} cancelled", peer_id);
+                    return Ok(());
+                }
+            }
+
+            // Read message type marker (race with cancellation token if present)
             let mut marker = [0u8; 1];
-            match tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut marker)).await {
+            let read_result = if let Some(ref token) = cancel {
+                tokio::select! {
+                    res = tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut marker)) => res,
+                    () = token.cancelled() => {
+                        tracing::debug!(
+                            "Sync channel receive loop for peer {:?} cancelled during read",
+                            peer_id
+                        );
+                        return Ok(());
+                    }
+                }
+            } else {
+                tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut marker)).await
+            };
+
+            match read_result {
                 Ok(Ok(_)) => {}
                 Ok(Err(e)) => {
                     // Stream closed or error
