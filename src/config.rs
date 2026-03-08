@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 /// Configuration for the Iroh networking layer.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone)]
 pub struct IrohConfig {
     /// Explicit bind address for the Iroh endpoint.
     /// When `None`, Iroh picks an available port automatically.
@@ -18,6 +18,25 @@ pub struct IrohConfig {
     /// When `Some`, used as `SecretKey::from_bytes()` for the Iroh endpoint,
     /// giving the node a stable, reproducible identity.
     pub secret_key: Option<[u8; 32]>,
+    /// Timeout for binding the QUIC endpoint (default: 10s).
+    pub bind_timeout: Duration,
+    /// Timeout for graceful shutdown (default: 5s).
+    pub shutdown_timeout: Duration,
+    /// Timeout for blob download operations from remote peers (default: 30s).
+    pub download_timeout: Duration,
+}
+
+impl Default for IrohConfig {
+    fn default() -> Self {
+        Self {
+            bind_addr: None,
+            relay_urls: Vec::new(),
+            secret_key: None,
+            bind_timeout: Duration::from_secs(10),
+            shutdown_timeout: Duration::from_secs(5),
+            download_timeout: Duration::from_secs(30),
+        }
+    }
 }
 
 /// Top-level configuration for PeatMesh.
@@ -221,6 +240,9 @@ mod tests {
         let cfg = IrohConfig::default();
         assert!(cfg.bind_addr.is_none());
         assert!(cfg.relay_urls.is_empty());
+        assert_eq!(cfg.bind_timeout, Duration::from_secs(10));
+        assert_eq!(cfg.shutdown_timeout, Duration::from_secs(5));
+        assert_eq!(cfg.download_timeout, Duration::from_secs(30));
     }
 
     #[test]
