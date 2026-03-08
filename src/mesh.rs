@@ -12,6 +12,7 @@ use std::fmt;
 use std::sync::{Arc, RwLock};
 use std::time::Instant;
 use tokio::sync::broadcast;
+use tokio_util::sync::CancellationToken;
 
 // ─── Lifecycle state ─────────────────────────────────────────────────────────
 
@@ -150,6 +151,10 @@ pub struct PeatMesh {
     #[cfg(feature = "broker")]
     broker_event_tx: broadcast::Sender<crate::broker::state::MeshEvent>,
     started_at: RwLock<Option<Instant>>,
+    /// Token for signalling graceful shutdown to background tasks.
+    /// Wrapped in `RwLock` so `start()` can replace a cancelled token
+    /// when restarting a previously-stopped mesh.
+    cancellation_token: RwLock<CancellationToken>,
 }
 
 impl PeatMesh {
@@ -185,6 +190,7 @@ impl PeatMesh {
             #[cfg(feature = "broker")]
             broker_event_tx,
             started_at: RwLock::new(None),
+            cancellation_token: RwLock::new(CancellationToken::new()),
         }
     }
 
@@ -203,6 +209,13 @@ impl PeatMesh {
             .event_tx
             .send(PeatMeshEvent::StateChanged(MeshState::Starting));
 
+        // Reset the cancellation token so a previously-stopped mesh can
+        // restart with a fresh, uncancelled token.
+        *self
+            .cancellation_token
+            .write()
+            .unwrap_or_else(|e| e.into_inner()) = CancellationToken::new();
+
         *state = MeshState::Running;
         *self.started_at.write().unwrap_or_else(|e| e.into_inner()) = Some(Instant::now());
         let _ = self
@@ -219,6 +232,10 @@ impl PeatMesh {
     }
 
     /// Stop the mesh (Running → Stopping → Stopped).
+    ///
+    /// Cancels the shared [`CancellationToken`] so that background tasks
+    /// (topology builder, sync channels, etc.) observe the signal and exit
+    /// promptly instead of waiting for their next interval or timeout.
     pub fn stop(&self) -> Result<(), MeshError> {
         let mut state = self.state.write().unwrap_or_else(|e| e.into_inner());
         match *state {
@@ -230,6 +247,12 @@ impl PeatMesh {
         let _ = self
             .event_tx
             .send(PeatMeshEvent::StateChanged(MeshState::Stopping));
+
+        // Signal all background tasks to shut down.
+        self.cancellation_token
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .cancel();
 
         *state = MeshState::Stopped;
         let _ = self
@@ -282,6 +305,18 @@ impl PeatMesh {
     /// Subscribe to mesh-wide events.
     pub fn subscribe_events(&self) -> broadcast::Receiver<PeatMeshEvent> {
         self.event_tx.subscribe()
+    }
+
+    /// Obtain a child cancellation token for a background task.
+    ///
+    /// The returned token is cancelled when [`stop()`](Self::stop) is called.
+    /// Each call returns a new child so that individual subsystems can also
+    /// cancel their own children independently.
+    pub fn child_token(&self) -> CancellationToken {
+        self.cancellation_token
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .child_token()
     }
 
     /// Set the transport layer.
@@ -677,6 +712,7 @@ impl PeatMeshBuilder {
             #[cfg(feature = "broker")]
             broker_event_tx,
             started_at: RwLock::new(None),
+            cancellation_token: RwLock::new(CancellationToken::new()),
         }
     }
 }
@@ -1596,6 +1632,42 @@ mod tests {
             .with_topology_manager(tm)
             .build();
         assert!(mesh.topology_manager().is_some());
+    }
+
+    // ── Cancellation token ──────────────────────────────────────────
+
+    #[test]
+    fn test_child_token_not_cancelled_while_running() {
+        let mesh = PeatMesh::new(MeshConfig::default());
+        mesh.start().unwrap();
+        let token = mesh.child_token();
+        assert!(!token.is_cancelled());
+    }
+
+    #[test]
+    fn test_child_token_cancelled_after_stop() {
+        let mesh = PeatMesh::new(MeshConfig::default());
+        mesh.start().unwrap();
+        let token = mesh.child_token();
+        mesh.stop().unwrap();
+        assert!(token.is_cancelled());
+    }
+
+    #[test]
+    fn test_child_token_reset_on_restart() {
+        let mesh = PeatMesh::new(MeshConfig::default());
+        mesh.start().unwrap();
+        let first_token = mesh.child_token();
+        mesh.stop().unwrap();
+        assert!(first_token.is_cancelled());
+
+        // Re-start: new token should be fresh (uncancelled)
+        mesh.start().unwrap();
+        let second_token = mesh.child_token();
+        assert!(!second_token.is_cancelled());
+
+        // First token remains cancelled (it belonged to the old lifecycle)
+        assert!(first_token.is_cancelled());
     }
 }
 

@@ -207,8 +207,20 @@ impl TopologyBuilder {
         }
     }
 
-    /// Start topology formation
+    /// Start topology formation.
+    ///
+    /// Accepts an optional [`CancellationToken`](tokio_util::sync::CancellationToken).
+    /// When the token is cancelled the periodic evaluation loop exits
+    /// immediately instead of waiting for the next interval tick.
+    /// Pass `None` to retain the previous abort-only behaviour.
     pub async fn start(&self) {
+        self.start_with_token(None).await;
+    }
+
+    /// Start topology formation with an explicit cancellation token.
+    ///
+    /// See [`start`](Self::start) for details.
+    pub async fn start_with_token(&self, cancel: Option<tokio_util::sync::CancellationToken>) {
         let mut handle_guard = self.task_handle.lock().unwrap_or_else(|e| e.into_inner());
         if handle_guard.is_some() {
             return; // Already running
@@ -226,11 +238,30 @@ impl TopologyBuilder {
             let mut interval = config.reevaluation_interval.map(tokio::time::interval);
 
             loop {
-                // Wait for either interval or shutdown signal
-                if let Some(ref mut int) = interval {
+                // Wait for either interval tick or cancellation.
+                let cancelled = if let Some(ref token) = cancel {
+                    if let Some(ref mut int) = interval {
+                        tokio::select! {
+                            _ = int.tick() => false,
+                            () = token.cancelled() => true,
+                        }
+                    } else {
+                        tokio::select! {
+                            _ = tokio::time::sleep(Duration::from_secs(60)) => false,
+                            () = token.cancelled() => true,
+                        }
+                    }
+                } else if let Some(ref mut int) = interval {
                     int.tick().await;
+                    false
                 } else {
                     tokio::time::sleep(Duration::from_secs(60)).await;
+                    false
+                };
+
+                if cancelled {
+                    tracing::debug!("Topology builder shutting down via cancellation token");
+                    break;
                 }
 
                 // Evaluate topology
