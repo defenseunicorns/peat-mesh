@@ -3,6 +3,32 @@
 //! Provides [`PeatMesh`] as the single entry point that composes transport,
 //! topology, routing, hierarchy, and (optionally) the HTTP/WS broker into a
 //! cohesive mesh networking stack.
+//!
+//! # Lock ordering
+//!
+//! `PeatMesh` contains three sync `RwLock`s:
+//!
+//! | Lock | Type | Protects |
+//! |------|------|----------|
+//! | `state` | `std::sync::RwLock<MeshState>` | Lifecycle state machine |
+//! | `discovery` | `std::sync::RwLock<Option<Box<dyn DiscoveryStrategy>>>` | Discovery strategy |
+//! | `started_at` | `std::sync::RwLock<Option<Instant>>` | Start timestamp |
+//! | `cancellation_token` | `std::sync::RwLock<CancellationToken>` | Shutdown signalling |
+//!
+//! **Required acquisition order (when multiple locks are needed):**
+//!
+//! 1. `state`
+//! 2. `cancellation_token`
+//! 3. `discovery`
+//! 4. `started_at`
+//!
+//! In practice, `start()` and `stop()` are the only methods that acquire more
+//! than one of these locks, and they follow this order. All other accessors
+//! acquire a single lock at a time.
+//!
+//! **Invariant:** none of these locks should be held while calling into
+//! subsystem locks (e.g., `TransportManager` or `SyncChannel`). The facade
+//! reads its own state, releases the guard, then delegates to the subsystem.
 
 use crate::config::MeshConfig;
 use crate::hierarchy::HierarchyStrategy;
