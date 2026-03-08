@@ -37,6 +37,45 @@
 //! - Reduces QUIC handshake latency
 //! - Enables message multiplexing
 //! - Automatic reconnection on failure
+//!
+//! # Lock ordering
+//!
+//! ## `SyncChannel`
+//!
+//! Each channel contains two async `Mutex`es and two sync `RwLock`s:
+//!
+//! | Lock | Type | Protects |
+//! |------|------|----------|
+//! | `send` | `tokio::sync::Mutex<Option<SendStream>>` | Outbound QUIC stream |
+//! | `recv_task` | `tokio::sync::Mutex<Option<JoinHandle>>` | Background receiver handle |
+//! | `state` | `std::sync::RwLock<ChannelState>` | Channel lifecycle state |
+//! | `last_send` | `std::sync::RwLock<Instant>` | Timestamp bookkeeping |
+//!
+//! **Required acquisition order (when multiple locks are needed):**
+//!
+//! 1. `state` (sync RwLock) -- read or write, then **release** before step 2
+//! 2. `send` (async Mutex)
+//! 3. `state` / `last_send` (sync RwLock) -- may re-acquire after `send`
+//!
+//! All current methods (`send`, `reconnect`, `close`) follow this discipline:
+//! they snapshot `state` into a local variable, drop the `RwLock` guard, and
+//! only then await `send.lock()`. This avoids holding a sync lock across an
+//! `.await` point and prevents deadlocks between `state` and `send`.
+//!
+//! **Invariant:** never hold `state` (or `last_send`) while awaiting `send`
+//! or `recv_task`. Sync `RwLock` guards are not `Send` and would block the
+//! async runtime if held across an await.
+//!
+//! ## `SyncChannelManager`
+//!
+//! | Lock | Type | Protects |
+//! |------|------|----------|
+//! | `channels` | `std::sync::RwLock<HashMap<EndpointId, Arc<SyncChannel>>>` | Per-peer channel map |
+//!
+//! `channels` is always acquired briefly (read to look up, write to insert or
+//! remove) and released before calling any async method on a `SyncChannel`.
+//! This ensures the manager lock is never held while a channel lock is
+//! contended.
 
 #[cfg(feature = "automerge-backend")]
 use anyhow::{Context, Result};

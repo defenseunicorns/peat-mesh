@@ -24,6 +24,34 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 //!
+//! ## Lock ordering
+//!
+//! `TransportManager` contains four sync `RwLock`s and one optional async
+//! `RwLock`:
+//!
+//! | Lock | Type | Protects |
+//! |------|------|----------|
+//! | `transport_instances` | `std::sync::RwLock` | PACE transport registry |
+//! | `peer_transports` | `std::sync::RwLock` | Legacy per-peer transport cache |
+//! | `peer_transport_ids` | `std::sync::RwLock` | PACE per-peer transport cache |
+//! | `peer_distances` | `std::sync::RwLock` | Distance estimates per peer |
+//! | `bypass_channel` | `tokio::sync::RwLock` (behind `Option<Arc<..>>`) | UDP bypass channel |
+//!
+//! **No method acquires more than one of these locks simultaneously.** Each
+//! public method reads or writes a single lock, completes its work, and
+//! releases the guard before returning or performing further I/O. This means
+//! there is no required ordering among the four locks and no deadlock risk
+//! within this module.
+//!
+//! **Invariant:** never hold any sync `RwLock` in this struct while awaiting
+//! `bypass_channel`. The sync guards are not `Send` and would block the async
+//! runtime if held across an `.await` point.
+//!
+//! `transports` (the legacy `HashMap<TransportType, Arc<dyn Transport>>`) is
+//! *not* behind a lock -- it is only mutated through `&mut self` methods
+//! (`register`, `unregister`) which require exclusive access at construction
+//! time.
+//!
 //! ## Example
 //!
 //! ```ignore

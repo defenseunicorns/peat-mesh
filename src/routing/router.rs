@@ -10,6 +10,19 @@
 //! The router includes optional message deduplication to prevent routing loops.
 //! When enabled, each packet's ID is tracked and duplicate packets are automatically
 //! dropped. The deduplication cache uses a time-based eviction strategy.
+//!
+//! ## Lock ordering
+//!
+//! `SelectiveRouter` contains a single lock:
+//!
+//! | Lock | Type | Protects |
+//! |------|------|----------|
+//! | `seen_packets` | `std::sync::RwLock<HashMap<String, DeduplicationEntry>>` | Dedup cache |
+//!
+//! Because only one lock exists, there is no ordering constraint within this
+//! module. Callers that also hold locks from other modules (e.g.,
+//! `TransportManager` or `PeatMesh::state`) should acquire `seen_packets`
+//! **after** releasing those outer locks to avoid contention.
 
 use super::packet::{DataDirection, DataPacket};
 use crate::beacon::HierarchyLevel;
