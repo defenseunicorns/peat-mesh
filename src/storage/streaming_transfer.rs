@@ -24,6 +24,7 @@
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::io;
+use std::time::Duration;
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tracing::debug;
 
@@ -36,6 +37,27 @@ pub struct StreamingTransferConfig {
     pub checkpoint_interval: usize,
     /// Whether to verify the final digest (default: true).
     pub verify_digest: bool,
+    /// Timeout for individual read operations.
+    #[serde(with = "duration_secs")]
+    pub read_timeout: Duration,
+    /// Timeout for individual write operations.
+    #[serde(with = "duration_secs")]
+    pub write_timeout: Duration,
+}
+
+/// Serde helper: serialize `Duration` as whole seconds (u64).
+mod duration_secs {
+    use serde::{Deserialize, Deserializer, Serializer};
+    use std::time::Duration;
+
+    pub fn serialize<S: Serializer>(d: &Duration, s: S) -> Result<S::Ok, S::Error> {
+        s.serialize_u64(d.as_secs())
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(d: D) -> Result<Duration, D::Error> {
+        let secs = u64::deserialize(d)?;
+        Ok(Duration::from_secs(secs))
+    }
 }
 
 impl Default for StreamingTransferConfig {
@@ -51,6 +73,8 @@ impl StreamingTransferConfig {
             chunk_size: 32 * 1024 * 1024, // 32 MB
             checkpoint_interval: 128,
             verify_digest: true,
+            read_timeout: Duration::from_secs(60),
+            write_timeout: Duration::from_secs(60),
         }
     }
 
@@ -60,6 +84,8 @@ impl StreamingTransferConfig {
             chunk_size: 8 * 1024 * 1024, // 8 MB
             checkpoint_interval: 64,
             verify_digest: true,
+            read_timeout: Duration::from_secs(120),
+            write_timeout: Duration::from_secs(120),
         }
     }
 
@@ -69,6 +95,8 @@ impl StreamingTransferConfig {
             chunk_size: 1024 * 1024, // 1 MB
             checkpoint_interval: 32,
             verify_digest: true,
+            read_timeout: Duration::from_secs(300),
+            write_timeout: Duration::from_secs(300),
         }
     }
 
@@ -78,6 +106,8 @@ impl StreamingTransferConfig {
             chunk_size,
             checkpoint_interval,
             verify_digest: true,
+            read_timeout: Duration::from_secs(120),
+            write_timeout: Duration::from_secs(120),
         }
     }
 
@@ -228,7 +258,23 @@ where
 
     // Main transfer loop
     loop {
-        let n = source.read(&mut buf).await?;
+        let n = tokio::time::timeout(config.read_timeout, source.read(&mut buf))
+            .await
+            .map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!(
+                        "read timed out after {:?} at offset {}",
+                        config.read_timeout, checkpoint.offset
+                    ),
+                )
+            })?
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!("read failed at offset {}: {e}", checkpoint.offset),
+                )
+            })?;
         if n == 0 {
             break; // EOF
         }
@@ -237,7 +283,23 @@ where
         hasher.update(&buf[..n]);
 
         // Write to target
-        target.write_all(&buf[..n]).await?;
+        tokio::time::timeout(config.write_timeout, target.write_all(&buf[..n]))
+            .await
+            .map_err(|_| {
+                io::Error::new(
+                    io::ErrorKind::TimedOut,
+                    format!(
+                        "write timed out after {:?} at offset {}",
+                        config.write_timeout, checkpoint.offset
+                    ),
+                )
+            })?
+            .map_err(|e| {
+                io::Error::new(
+                    e.kind(),
+                    format!("write failed at offset {}: {e}", checkpoint.offset),
+                )
+            })?;
 
         // Update checkpoint
         checkpoint.offset += n as u64;
