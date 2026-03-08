@@ -35,6 +35,7 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::RwLock;
+use std::time::Duration;
 use tracing::{debug, info, warn};
 
 /// Sidecar metadata stored alongside blobs
@@ -527,6 +528,10 @@ pub struct NetworkedIrohBlobStore {
     known_peers: TokioRwLock<Vec<EndpointId>>,
     /// Static discovery provider for adding peer addresses at runtime
     static_provider: StaticProvider,
+    /// Timeout for graceful shutdown
+    shutdown_timeout: Duration,
+    /// Timeout for blob download operations from remote peers
+    download_timeout: Duration,
 }
 
 impl NetworkedIrohBlobStore {
@@ -588,9 +593,14 @@ impl NetworkedIrohBlobStore {
             builder = builder.relay_mode(RelayMode::Custom(relay_map));
         }
 
-        let endpoint = builder
-            .bind()
+        let endpoint = tokio::time::timeout(config.bind_timeout, builder.bind())
             .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "Iroh endpoint bind timed out after {:?}",
+                    config.bind_timeout
+                )
+            })?
             .map_err(|e| anyhow::anyhow!("Failed to create iroh endpoint: {}", e))?;
 
         Ok((endpoint, static_provider))
@@ -602,7 +612,15 @@ impl NetworkedIrohBlobStore {
     /// constructing the iroh endpoint.
     pub async fn from_config(blob_dir: PathBuf, config: &IrohConfig) -> Result<Arc<Self>> {
         let (endpoint, static_provider) = Self::build_endpoint(config).await?;
-        Self::from_endpoint_with_protocols(blob_dir, endpoint, static_provider, vec![]).await
+        Self::from_endpoint_with_protocols_with_timeouts(
+            blob_dir,
+            endpoint,
+            static_provider,
+            vec![],
+            config.shutdown_timeout,
+            config.download_timeout,
+        )
+        .await
     }
 
     /// Get the endpoint ID (public key) for this node
@@ -639,11 +657,36 @@ impl NetworkedIrohBlobStore {
     /// The Router's `spawn()` automatically updates the endpoint's ALPN list
     /// from all registered protocols, so there is no need to pre-configure
     /// ALPNs on the endpoint builder.
+    ///
+    /// Uses default timeout values. For custom timeouts, use
+    /// [`from_endpoint_with_protocols_with_timeouts`](Self::from_endpoint_with_protocols_with_timeouts).
     pub async fn from_endpoint_with_protocols(
         blob_dir: PathBuf,
         endpoint: Endpoint,
         static_provider: StaticProvider,
         extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
+    ) -> Result<Arc<Self>> {
+        let defaults = IrohConfig::default();
+        Self::from_endpoint_with_protocols_with_timeouts(
+            blob_dir,
+            endpoint,
+            static_provider,
+            extra_protocols,
+            defaults.shutdown_timeout,
+            defaults.download_timeout,
+        )
+        .await
+    }
+
+    /// Like [`from_endpoint_with_protocols`](Self::from_endpoint_with_protocols)
+    /// but with explicit timeout configuration.
+    pub async fn from_endpoint_with_protocols_with_timeouts(
+        blob_dir: PathBuf,
+        endpoint: Endpoint,
+        static_provider: StaticProvider,
+        extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
+        shutdown_timeout: Duration,
+        download_timeout: Duration,
     ) -> Result<Arc<Self>> {
         let local_store = IrohBlobStore::new_in_memory(blob_dir).await?;
         let blobs_protocol = BlobsProtocol::new(&local_store.store, None);
@@ -663,14 +706,24 @@ impl NetworkedIrohBlobStore {
             blobs_protocol,
             known_peers: TokioRwLock::new(Vec::new()),
             static_provider,
+            shutdown_timeout,
+            download_timeout,
         }))
     }
 
     /// Gracefully shut down the protocol router and Iroh endpoint.
+    ///
+    /// Applies the configured `shutdown_timeout` (default 5s) to prevent
+    /// hanging on stuck QUIC connections.
     pub async fn shutdown(&self) -> Result<()> {
-        self.router
-            .shutdown()
+        tokio::time::timeout(self.shutdown_timeout, self.router.shutdown())
             .await
+            .map_err(|_| {
+                anyhow::anyhow!(
+                    "Router shutdown timed out after {:?}",
+                    self.shutdown_timeout
+                )
+            })?
             .map_err(|e| anyhow::anyhow!("Router shutdown error: {}", e))
     }
 
@@ -784,9 +837,31 @@ impl BlobStore for NetworkedIrohBlobStore {
                 total_bytes: token.size_bytes,
             });
 
-            // Try to download from this peer
-            match downloader.download(iroh_hash, Some(*peer_id)).await {
-                Ok(_) => {
+            // Try to download from this peer with timeout
+            let download_result = tokio::time::timeout(
+                self.download_timeout,
+                downloader.download(iroh_hash, Some(*peer_id)),
+            )
+            .await;
+
+            match download_result {
+                Err(_elapsed) => {
+                    warn!(
+                        "Download from peer {} timed out after {:?}",
+                        peer_id.fmt_short(),
+                        self.download_timeout
+                    );
+                    continue;
+                }
+                Ok(Err(e)) => {
+                    warn!(
+                        "Failed to download from peer {}: {}",
+                        peer_id.fmt_short(),
+                        e
+                    );
+                    continue;
+                }
+                Ok(Ok(_)) => {
                     info!(
                         "Successfully downloaded blob {} from peer {}",
                         token.hash.as_hex(),
@@ -808,14 +883,6 @@ impl BlobStore for NetworkedIrohBlobStore {
                     });
 
                     return Ok(BlobHandle::new(token.clone(), export_path));
-                }
-                Err(e) => {
-                    warn!(
-                        "Failed to download from peer {}: {}",
-                        peer_id.fmt_short(),
-                        e
-                    );
-                    continue;
                 }
             }
         }
