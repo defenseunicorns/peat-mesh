@@ -106,6 +106,9 @@ impl SyncChannel {
     const MAX_RECONNECT_ATTEMPTS: u32 = 3;
     /// Delay between reconnection attempts
     const RECONNECT_DELAY: Duration = Duration::from_millis(500);
+    /// Timeout for individual read operations in the receive loop.
+    /// If a peer stops sending mid-message, the loop breaks after this duration.
+    const RECV_TIMEOUT: Duration = Duration::from_secs(30);
 
     /// Create a new sync channel to a peer
     ///
@@ -182,11 +185,21 @@ impl SyncChannel {
         loop {
             // Read message type marker
             let mut marker = [0u8; 1];
-            match recv.read_exact(&mut marker).await {
-                Ok(_) => {}
-                Err(e) => {
+            match tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut marker)).await {
+                Ok(Ok(_)) => {}
+                Ok(Err(e)) => {
                     // Stream closed or error
                     return Err(anyhow::anyhow!("Stream read error: {}", e));
+                }
+                Err(_) => {
+                    tracing::warn!(
+                        "Sync channel receive timeout for peer {:?} (no data for {:?})",
+                        peer_id,
+                        Self::RECV_TIMEOUT,
+                    );
+                    return Err(anyhow::anyhow!(
+                        "Receive timeout waiting for message marker"
+                    ));
                 }
             }
 
@@ -201,15 +214,30 @@ impl SyncChannel {
 
             // Read batch length (4 bytes, big-endian)
             let mut len_bytes = [0u8; 4];
-            recv.read_exact(&mut len_bytes)
+            tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut len_bytes))
                 .await
+                .map_err(|_| {
+                    tracing::warn!(
+                        "Sync channel receive timeout for peer {:?} reading batch length",
+                        peer_id,
+                    );
+                    anyhow::anyhow!("Receive timeout reading batch length")
+                })?
                 .context("Failed to read batch length")?;
             let batch_len = u32::from_be_bytes(len_bytes) as usize;
 
             // Read batch data
             let mut batch_data = vec![0u8; batch_len];
-            recv.read_exact(&mut batch_data)
+            tokio::time::timeout(Self::RECV_TIMEOUT, recv.read_exact(&mut batch_data))
                 .await
+                .map_err(|_| {
+                    tracing::warn!(
+                        "Sync channel receive timeout for peer {:?} reading batch data ({} bytes)",
+                        peer_id,
+                        batch_len,
+                    );
+                    anyhow::anyhow!("Receive timeout reading batch data")
+                })?
                 .context("Failed to read batch data")?;
 
             // Decode and process batch
