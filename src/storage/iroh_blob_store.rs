@@ -516,8 +516,80 @@ use iroh::discovery::static_provider::StaticProvider;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_blobs::BlobsProtocol;
+use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
+
+// ============================================================================
+// BlobPeerIndex - O(1) blob-to-peer resolution
+// ============================================================================
+
+/// Tracks which peers have which blobs for O(1) resolution.
+///
+/// Maintains bidirectional mappings between blob hashes and peer endpoints,
+/// enabling efficient lookup in both directions without scanning.
+///
+/// # Thread Safety
+///
+/// This struct is intended to be wrapped in a `TokioRwLock` by its owner.
+#[derive(Debug, Default)]
+pub struct BlobPeerIndex {
+    /// Reverse index: blob hash → set of peers that have it
+    blob_to_peers: HashMap<BlobHash, HashSet<EndpointId>>,
+    /// Forward index: peer → set of blob hashes they have
+    peer_to_blobs: HashMap<EndpointId, HashSet<BlobHash>>,
+}
+
+impl BlobPeerIndex {
+    /// Create an empty index.
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Record that a peer has a specific blob.
+    pub fn advertise(&mut self, peer: EndpointId, hash: BlobHash) {
+        self.blob_to_peers
+            .entry(hash.clone())
+            .or_default()
+            .insert(peer);
+        self.peer_to_blobs.entry(peer).or_default().insert(hash);
+    }
+
+    /// Remove all entries for a peer.
+    pub fn remove_peer(&mut self, peer: &EndpointId) {
+        if let Some(blobs) = self.peer_to_blobs.remove(peer) {
+            for hash in &blobs {
+                if let Some(peers) = self.blob_to_peers.get_mut(hash) {
+                    peers.remove(peer);
+                    if peers.is_empty() {
+                        self.blob_to_peers.remove(hash);
+                    }
+                }
+            }
+        }
+    }
+
+    /// Get the set of peers known to have a specific blob.
+    pub fn peers_with_blob(&self, hash: &BlobHash) -> Vec<EndpointId> {
+        self.blob_to_peers
+            .get(hash)
+            .map(|peers| peers.iter().copied().collect())
+            .unwrap_or_default()
+    }
+
+    /// Get the number of blobs known on a specific peer.
+    pub fn peer_blob_count(&self, peer: &EndpointId) -> usize {
+        self.peer_to_blobs
+            .get(peer)
+            .map(|blobs| blobs.len())
+            .unwrap_or(0)
+    }
+
+    /// Total number of unique blob→peer mappings tracked.
+    pub fn total_entries(&self) -> usize {
+        self.blob_to_peers.values().map(|s| s.len()).sum()
+    }
+}
 
 /// Networked Iroh blob store with P2P sync capabilities
 ///
@@ -563,6 +635,8 @@ pub struct NetworkedIrohBlobStore {
     blobs_protocol: BlobsProtocol,
     /// Known peers that may have blobs
     known_peers: TokioRwLock<Vec<EndpointId>>,
+    /// Reverse index: blob hash → peers that have it, peer → blob hashes
+    blob_peer_index: TokioRwLock<BlobPeerIndex>,
     /// Static discovery provider for adding peer addresses at runtime
     static_provider: StaticProvider,
     /// Timeout for graceful shutdown
@@ -742,6 +816,7 @@ impl NetworkedIrohBlobStore {
             router,
             blobs_protocol,
             known_peers: TokioRwLock::new(Vec::new()),
+            blob_peer_index: TokioRwLock::new(BlobPeerIndex::new()),
             static_provider,
             shutdown_timeout,
             download_timeout,
@@ -773,15 +848,39 @@ impl NetworkedIrohBlobStore {
         }
     }
 
-    /// Remove a peer from the known peers list
+    /// Remove a peer from the known peers list and clean up its index entries.
     pub async fn remove_peer(&self, peer_id: &EndpointId) {
         let mut peers = self.known_peers.write().await;
         peers.retain(|p| p != peer_id);
+        drop(peers);
+
+        let mut index = self.blob_peer_index.write().await;
+        index.remove_peer(peer_id);
     }
 
     /// List known peers
     pub async fn known_peers(&self) -> Vec<EndpointId> {
         self.known_peers.read().await.clone()
+    }
+
+    /// Record that a peer has a specific blob.
+    ///
+    /// Call this when you learn (via gossip, sync, or direct query) that
+    /// a peer has a blob. Enables O(1) peer lookup in [`fetch_blob`](Self::fetch_blob).
+    pub async fn advertise_blob(&self, peer: EndpointId, hash: BlobHash) {
+        self.blob_peer_index.write().await.advertise(peer, hash);
+    }
+
+    /// Get peers known to have a specific blob.
+    ///
+    /// Returns an empty vec if no peer info is known for this blob.
+    pub async fn peers_with_blob(&self, hash: &BlobHash) -> Vec<EndpointId> {
+        self.blob_peer_index.read().await.peers_with_blob(hash)
+    }
+
+    /// Get a reference to the blob peer index.
+    pub async fn blob_peer_index(&self) -> tokio::sync::RwLockReadGuard<'_, BlobPeerIndex> {
+        self.blob_peer_index.read().await
     }
 
     /// Get the iroh-blobs Store API for advanced operations
@@ -850,8 +949,15 @@ impl BlobStore for NetworkedIrohBlobStore {
             total_bytes: token.size_bytes,
         });
 
-        let peers = self.known_peers.read().await.clone();
-        if peers.is_empty() {
+        // Build ordered peer list: indexed peers first, then remaining known peers
+        let indexed_peers = self
+            .blob_peer_index
+            .read()
+            .await
+            .peers_with_blob(&token.hash);
+        let all_peers = self.known_peers.read().await.clone();
+
+        if all_peers.is_empty() {
             progress(BlobProgress::Failed {
                 error: format!(
                     "Blob {} not available locally and no peers known",
@@ -864,16 +970,33 @@ impl BlobStore for NetworkedIrohBlobStore {
             ));
         }
 
+        // Prioritize peers from the index, then try the rest
+        let mut ordered_peers = indexed_peers.clone();
+        for peer in &all_peers {
+            if !ordered_peers.contains(peer) {
+                ordered_peers.push(*peer);
+            }
+        }
+
+        if !indexed_peers.is_empty() {
+            debug!(
+                "Blob {} indexed on {} peers, {} total known",
+                token.hash.as_hex(),
+                indexed_peers.len(),
+                all_peers.len()
+            );
+        }
+
         info!(
-            "Attempting to fetch blob {} from {} known peers",
+            "Attempting to fetch blob {} from {} peers",
             token.hash.as_hex(),
-            peers.len()
+            ordered_peers.len()
         );
 
         // Use the downloader to fetch from peers
         let downloader = self.store_api().downloader(self.router.endpoint());
 
-        for peer_id in &peers {
+        for peer_id in &ordered_peers {
             debug!(
                 "Trying peer {} for blob {}",
                 peer_id.fmt_short(),
@@ -916,6 +1039,12 @@ impl BlobStore for NetworkedIrohBlobStore {
                         peer_id.fmt_short()
                     );
 
+                    // Record in index for future lookups
+                    self.blob_peer_index
+                        .write()
+                        .await
+                        .advertise(*peer_id, token.hash.clone());
+
                     // Export to local filesystem
                     let export_path = self.local_store.export_blob(&iroh_hash).await?;
 
@@ -940,14 +1069,14 @@ impl BlobStore for NetworkedIrohBlobStore {
             error: format!(
                 "Failed to fetch blob {} from all {} peers",
                 token.hash,
-                peers.len()
+                ordered_peers.len()
             ),
         });
 
         Err(anyhow::anyhow!(
             "Failed to fetch blob {} from any of {} known peers",
             token.hash.as_hex(),
-            peers.len()
+            ordered_peers.len()
         ))
     }
 
@@ -1237,6 +1366,128 @@ mod tests {
         let mut buf = Vec::new();
         stream.read_to_end(&mut buf).await.unwrap();
         assert_eq!(buf, data);
+    }
+
+    // ---- BlobPeerIndex unit tests ----
+
+    fn test_peer_id(seed: u8) -> EndpointId {
+        SecretKey::from_bytes(&[seed; 32]).public()
+    }
+
+    #[test]
+    fn test_blob_peer_index_advertise_and_lookup() {
+        let mut index = BlobPeerIndex::new();
+        let peer_a = test_peer_id(1);
+        let peer_b = test_peer_id(2);
+        let hash = BlobHash::from_hex("abc123");
+
+        index.advertise(peer_a, hash.clone());
+        index.advertise(peer_b, hash.clone());
+
+        let peers = index.peers_with_blob(&hash);
+        assert_eq!(peers.len(), 2);
+        assert!(peers.contains(&peer_a));
+        assert!(peers.contains(&peer_b));
+    }
+
+    #[test]
+    fn test_blob_peer_index_remove_peer() {
+        let mut index = BlobPeerIndex::new();
+        let peer_a = test_peer_id(1);
+        let peer_b = test_peer_id(2);
+        let hash1 = BlobHash::from_hex("abc");
+        let hash2 = BlobHash::from_hex("def");
+
+        index.advertise(peer_a, hash1.clone());
+        index.advertise(peer_a, hash2.clone());
+        index.advertise(peer_b, hash1.clone());
+
+        assert_eq!(index.peer_blob_count(&peer_a), 2);
+        assert_eq!(index.total_entries(), 3);
+
+        index.remove_peer(&peer_a);
+
+        assert_eq!(index.peer_blob_count(&peer_a), 0);
+        assert_eq!(index.peers_with_blob(&hash1).len(), 1); // only peer_b
+        assert!(index.peers_with_blob(&hash2).is_empty()); // peer_a was the only one
+        assert_eq!(index.total_entries(), 1);
+    }
+
+    #[test]
+    fn test_blob_peer_index_unknown_blob() {
+        let index = BlobPeerIndex::new();
+        let hash = BlobHash::from_hex("nonexistent");
+        assert!(index.peers_with_blob(&hash).is_empty());
+    }
+
+    #[test]
+    fn test_blob_peer_index_duplicate_advertise() {
+        let mut index = BlobPeerIndex::new();
+        let peer = test_peer_id(1);
+        let hash = BlobHash::from_hex("abc");
+
+        index.advertise(peer, hash.clone());
+        index.advertise(peer, hash.clone()); // duplicate
+
+        assert_eq!(index.peers_with_blob(&hash).len(), 1);
+        assert_eq!(index.peer_blob_count(&peer), 1);
+        assert_eq!(index.total_entries(), 1);
+    }
+
+    // ---- Integration tests ----
+
+    /// After a successful P2P fetch, the blob→peer mapping should be recorded in the index.
+    #[tokio::test]
+    async fn test_p2p_fetch_populates_index() {
+        let dir_a = TempDir::new().unwrap();
+        let dir_b = TempDir::new().unwrap();
+
+        let config_a = IrohConfig {
+            secret_key: Some([1u8; 32]),
+            ..Default::default()
+        };
+        let config_b = IrohConfig {
+            secret_key: Some([2u8; 32]),
+            ..Default::default()
+        };
+
+        let store_a = NetworkedIrohBlobStore::from_config(dir_a.path().to_path_buf(), &config_a)
+            .await
+            .unwrap();
+        let store_b = NetworkedIrohBlobStore::from_config(dir_b.path().to_path_buf(), &config_b)
+            .await
+            .unwrap();
+
+        // Wire up discovery
+        let addr_a = store_a
+            .endpoint()
+            .bound_sockets()
+            .into_iter()
+            .next()
+            .unwrap();
+        let endpoint_addr_a = iroh::EndpointAddr::from_parts(
+            store_a.endpoint_id(),
+            [iroh::TransportAddr::Ip(addr_a)],
+        );
+        store_b.static_provider().add_endpoint_info(endpoint_addr_a);
+        store_b.add_peer(store_a.endpoint_id()).await;
+
+        // Index should be empty before fetch
+        let token = store_a
+            .create_blob_from_bytes(b"indexed blob", BlobMetadata::with_name("idx.bin"))
+            .await
+            .unwrap();
+        assert!(store_b.peers_with_blob(&token.hash).await.is_empty());
+
+        // Fetch — should populate the index
+        let _handle = store_b.fetch_blob(&token, |_| {}).await.unwrap();
+
+        let indexed_peers = store_b.peers_with_blob(&token.hash).await;
+        assert_eq!(indexed_peers.len(), 1);
+        assert_eq!(indexed_peers[0], store_a.endpoint_id());
+
+        store_a.shutdown().await.unwrap();
+        store_b.shutdown().await.unwrap();
     }
 
     /// Two `NetworkedIrohBlobStore` instances discover each other via
