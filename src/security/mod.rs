@@ -8,13 +8,17 @@
 //! - [`EncryptionKeypair`] / [`EncryptionManager`] - X25519/ChaCha20 encryption
 //! - [`FormationKey`] - HMAC-SHA256 PSK formation authentication
 //! - [`CallsignGenerator`] - NATO phonetic callsign generation
+//! - [`MeshCertificate`] / [`CertificateBundle`] - Peer certificate validation
+//! - [`EnrollmentService`] - Mesh enrollment protocol
 //!
 //! These primitives have no domain-specific dependencies and can be used
 //! by any mesh networking application.
 
 pub mod callsign;
+pub mod certificate;
 pub mod device_id;
 pub mod encryption;
+pub mod enrollment;
 pub mod error;
 pub mod formation_key;
 pub mod keypair;
@@ -22,10 +26,15 @@ pub mod keypair;
 pub use callsign::{
     CallsignError, CallsignGenerator, MAX_CALLSIGN_LENGTH, NATO_ALPHABET, TOTAL_CALLSIGNS,
 };
+pub use certificate::{CertificateBundle, MeshCertificate, MeshTier};
 pub use device_id::DeviceId;
 pub use encryption::{
     EncryptedCellMessage, EncryptedData, EncryptedDocument, EncryptionKeypair, EncryptionManager,
     GroupKey, SecureChannel, SymmetricKey, NONCE_SIZE, SYMMETRIC_KEY_SIZE, X25519_PUBLIC_KEY_SIZE,
+};
+pub use enrollment::{
+    EnrollmentRequest, EnrollmentResponse, EnrollmentService, EnrollmentStatus,
+    StaticEnrollmentService,
 };
 pub use error::SecurityError;
 pub use formation_key::{

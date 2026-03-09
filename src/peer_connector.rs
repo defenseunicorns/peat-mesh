@@ -6,12 +6,13 @@
 //! through non-Iroh discovery mechanisms.
 
 use crate::discovery::DiscoveryEvent;
+use crate::security::certificate::CertificateBundle;
 use crate::storage::NetworkedIrohBlobStore;
 use hkdf::Hkdf;
 use iroh::{EndpointAddr, EndpointId, SecretKey, TransportAddr};
 use sha2::Sha256;
 use std::sync::Arc;
-use tokio::sync::mpsc;
+use tokio::sync::{mpsc, RwLock};
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -23,6 +24,12 @@ use tracing::{debug, info, warn};
 pub struct PeerConnector {
     formation_secret: Vec<u8>,
     blob_store: Arc<NetworkedIrohBlobStore>,
+    /// Optional certificate bundle for peer validation.
+    /// When set, only peers with valid certificates are connected.
+    certificate_bundle: Option<Arc<RwLock<CertificateBundle>>>,
+    /// Whether to require peer certificates. When false and a bundle is present,
+    /// unknown peers are allowed with a warning.
+    require_certificates: bool,
 }
 
 impl PeerConnector {
@@ -36,7 +43,20 @@ impl PeerConnector {
         Self {
             formation_secret,
             blob_store,
+            certificate_bundle: None,
+            require_certificates: false,
         }
+    }
+
+    /// Set the certificate bundle for peer validation.
+    pub fn with_certificate_bundle(
+        mut self,
+        bundle: Arc<RwLock<CertificateBundle>>,
+        require: bool,
+    ) -> Self {
+        self.certificate_bundle = Some(bundle);
+        self.require_certificates = require;
+        self
     }
 
     /// Derive the Iroh `EndpointId` for a peer given its hostname.
@@ -74,6 +94,35 @@ impl PeerConnector {
                                 "Skipping self in peer discovery"
                             );
                             continue;
+                        }
+
+                        // Certificate validation
+                        if let Some(ref bundle) = self.certificate_bundle {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis() as u64;
+                            let bundle = bundle.read().await;
+                            if !bundle.validate_node_id(&peer_info.node_id, now) {
+                                if self.require_certificates {
+                                    warn!(
+                                        peer = %peer_info.node_id,
+                                        "Rejecting peer: no valid certificate"
+                                    );
+                                    continue;
+                                }
+                                debug!(
+                                    peer = %peer_info.node_id,
+                                    "Peer has no certificate (not required)"
+                                );
+                            } else {
+                                let tier = bundle.get_node_tier(&peer_info.node_id);
+                                info!(
+                                    peer = %peer_info.node_id,
+                                    tier = ?tier,
+                                    "Peer certificate validated"
+                                );
+                            }
                         }
 
                         let addrs: std::collections::BTreeSet<TransportAddr> = peer_info
@@ -118,6 +167,28 @@ impl PeerConnector {
 
                         if endpoint_id == my_endpoint_id {
                             continue;
+                        }
+
+                        // Re-validate certificate on update
+                        if let Some(ref bundle) = self.certificate_bundle {
+                            let now = std::time::SystemTime::now()
+                                .duration_since(std::time::UNIX_EPOCH)
+                                .unwrap()
+                                .as_millis() as u64;
+                            let bundle = bundle.read().await;
+                            if !bundle.validate_node_id(&peer_info.node_id, now)
+                                && self.require_certificates
+                            {
+                                warn!(
+                                    peer = %peer_info.node_id,
+                                    "Removing peer on update: certificate no longer valid"
+                                );
+                                self.blob_store
+                                    .static_provider()
+                                    .remove_endpoint_info(endpoint_id);
+                                self.blob_store.remove_peer(&endpoint_id).await;
+                                continue;
+                            }
                         }
 
                         let addrs: std::collections::BTreeSet<TransportAddr> = peer_info
