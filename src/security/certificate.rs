@@ -235,8 +235,7 @@ impl MeshCertificate {
 
     /// The bytes that are signed (everything except the signature itself).
     fn signable_bytes(&self) -> Vec<u8> {
-        let mut buf =
-            Vec::with_capacity(83 + self.mesh_id.len() + self.node_id.len());
+        let mut buf = Vec::with_capacity(83 + self.mesh_id.len() + self.node_id.len());
         buf.extend_from_slice(&self.subject_public_key);
         buf.push(self.mesh_id.len() as u8);
         buf.extend_from_slice(self.mesh_id.as_bytes());
@@ -467,8 +466,7 @@ impl CertificateBundle {
 
     /// Get the tier for a node_id, if it has a valid certificate.
     pub fn get_node_tier(&self, node_id: &str) -> Option<MeshTier> {
-        self.get_certificate_by_node_id(node_id)
-            .map(|c| c.tier)
+        self.get_certificate_by_node_id(node_id).map(|c| c.tier)
     }
 
     /// Number of certificates in the bundle.
@@ -847,7 +845,9 @@ mod tests {
         assert_eq!(bundle.get_node_tier("unknown"), None);
 
         // Certificate lookup by node_id
-        let found = bundle.get_certificate_by_node_id("tactical-west-3").unwrap();
+        let found = bundle
+            .get_certificate_by_node_id("tactical-west-3")
+            .unwrap();
         assert_eq!(found.subject_public_key, member.public_key_bytes());
     }
 

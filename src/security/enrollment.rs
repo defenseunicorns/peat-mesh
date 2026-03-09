@@ -110,7 +110,12 @@ impl EnrollmentRequest {
 
     fn signable_bytes(&self) -> Vec<u8> {
         let mut buf = Vec::with_capacity(
-            32 + 1 + self.mesh_id.len() + 1 + self.node_id.len() + 1 + 2
+            32 + 1
+                + self.mesh_id.len()
+                + 1
+                + self.node_id.len()
+                + 1
+                + 2
                 + self.bootstrap_token.len()
                 + 8,
         );
