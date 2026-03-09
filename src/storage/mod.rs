@@ -66,7 +66,7 @@ pub use flow_control::{
     PeerResourceTracker, SyncCooldownTracker, TokenBucket,
 };
 #[cfg(feature = "automerge-backend")]
-pub use iroh_blob_store::{IrohBlobStore, NetworkedIrohBlobStore};
+pub use iroh_blob_store::{BlobPeerIndex, IrohBlobStore, NetworkedIrohBlobStore};
 #[cfg(feature = "automerge-backend")]
 pub use negentropy_sync::{NegentropyStats, NegentropySync, ReconcileResult, SyncItem};
 #[cfg(feature = "automerge-backend")]
