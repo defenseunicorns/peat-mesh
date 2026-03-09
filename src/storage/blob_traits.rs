@@ -243,11 +243,22 @@ impl BlobHandle {
     ///
     /// # Warning
     ///
-    /// Only use for small blobs! For large blobs, stream from the path directly.
+    /// Only use for small blobs! For large blobs, use [`open_read_stream`](Self::open_read_stream).
     pub async fn read_to_vec(&self) -> Result<Vec<u8>> {
         tokio::fs::read(&self.path)
             .await
             .map_err(|e| anyhow::anyhow!("Failed to read blob at {:?}: {}", self.path, e))
+    }
+
+    /// Open the blob content as an async byte stream.
+    ///
+    /// Returns a [`tokio::fs::File`] which implements [`AsyncRead`](tokio::io::AsyncRead).
+    /// Use this instead of [`read_to_vec`](Self::read_to_vec) for large blobs to avoid
+    /// buffering the entire content in memory.
+    pub async fn open_read_stream(&self) -> Result<tokio::fs::File> {
+        tokio::fs::File::open(&self.path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to open blob stream at {:?}: {}", self.path, e))
     }
 
     /// Get the blob size in bytes
@@ -384,6 +395,38 @@ pub trait BlobStore: Send + Sync {
     /// Returns tokens for all blobs stored locally. Does not include
     /// blobs available only on remote peers.
     fn list_local_blobs(&self) -> Vec<BlobToken>;
+
+    /// Create a blob from an async byte stream.
+    ///
+    /// Streaming alternative to [`create_blob_from_bytes`](Self::create_blob_from_bytes)
+    /// for large blobs. Avoids requiring the caller to buffer the entire blob in memory.
+    ///
+    /// The default implementation buffers the stream and delegates to
+    /// `create_blob_from_bytes`. Backends that support streaming import
+    /// should override this.
+    ///
+    /// # Arguments
+    ///
+    /// * `stream` - Async byte stream of blob content
+    /// * `expected_size` - Size hint for pre-allocation (None if unknown)
+    /// * `metadata` - User-defined metadata to attach
+    async fn create_blob_from_stream(
+        &self,
+        stream: &mut (dyn tokio::io::AsyncRead + Send + Unpin),
+        expected_size: Option<u64>,
+        metadata: BlobMetadata,
+    ) -> Result<BlobToken> {
+        use tokio::io::AsyncReadExt;
+        let mut buf = match expected_size {
+            Some(size) => Vec::with_capacity(size as usize),
+            None => Vec::new(),
+        };
+        stream
+            .read_to_end(&mut buf)
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to read stream: {}", e))?;
+        self.create_blob_from_bytes(&buf, metadata).await
+    }
 
     /// Get total size of local blob storage in bytes
     fn local_storage_bytes(&self) -> u64;

@@ -244,6 +244,43 @@ impl BlobStore for IrohBlobStore {
         Ok(token)
     }
 
+    async fn create_blob_from_stream(
+        &self,
+        stream: &mut (dyn tokio::io::AsyncRead + Send + Unpin),
+        _expected_size: Option<u64>,
+        metadata: BlobMetadata,
+    ) -> Result<BlobToken> {
+        use std::sync::atomic::{AtomicU64, Ordering};
+        use tokio::io::AsyncWriteExt;
+
+        static STREAM_COUNTER: AtomicU64 = AtomicU64::new(0);
+
+        info!("Creating blob from stream");
+
+        // Stream to temp file to limit peak memory to one copy
+        let temp_path = self.blob_dir.join(format!(
+            ".stream_import_{}",
+            STREAM_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+
+        {
+            let mut file = tokio::fs::File::create(&temp_path)
+                .await
+                .with_context(|| format!("Failed to create temp file {:?}", temp_path))?;
+            tokio::io::copy(stream, &mut file)
+                .await
+                .map_err(|e| anyhow::anyhow!("Failed to stream blob to temp file: {}", e))?;
+            file.flush().await?;
+        }
+
+        let result = self.create_blob(&temp_path, metadata).await;
+
+        // Clean up temp file
+        let _ = tokio::fs::remove_file(&temp_path).await;
+
+        result
+    }
+
     async fn create_blob_from_bytes(
         &self,
         data: &[u8],
@@ -760,6 +797,17 @@ impl BlobStore for NetworkedIrohBlobStore {
         self.local_store.create_blob(path, metadata).await
     }
 
+    async fn create_blob_from_stream(
+        &self,
+        stream: &mut (dyn tokio::io::AsyncRead + Send + Unpin),
+        expected_size: Option<u64>,
+        metadata: BlobMetadata,
+    ) -> Result<BlobToken> {
+        self.local_store
+            .create_blob_from_stream(stream, expected_size, metadata)
+            .await
+    }
+
     async fn create_blob_from_bytes(
         &self,
         data: &[u8],
@@ -1132,6 +1180,63 @@ mod tests {
             parsed.metadata.custom.get("version"),
             Some(&"1.0".to_string())
         );
+    }
+
+    #[tokio::test]
+    async fn test_create_blob_from_stream() {
+        let (store, _temp) = create_test_store().await;
+
+        let data = b"Hello from a stream!";
+        let mut reader: &[u8] = data;
+        let metadata = BlobMetadata::with_name("streamed.txt");
+
+        let token = store
+            .create_blob_from_stream(&mut reader, Some(data.len() as u64), metadata)
+            .await
+            .unwrap();
+
+        assert_eq!(token.size_bytes, data.len() as u64);
+        assert_eq!(token.metadata.name, Some("streamed.txt".to_string()));
+
+        // Verify content round-trips
+        let handle = store.fetch_blob(&token, |_| {}).await.unwrap();
+        let content = std::fs::read(&handle.path).unwrap();
+        assert_eq!(content, data);
+    }
+
+    #[tokio::test]
+    async fn test_create_blob_from_stream_unknown_size() {
+        let (store, _temp) = create_test_store().await;
+
+        let data = b"Stream with unknown size";
+        let mut reader: &[u8] = data;
+
+        let token = store
+            .create_blob_from_stream(&mut reader, None, BlobMetadata::default())
+            .await
+            .unwrap();
+
+        assert_eq!(token.size_bytes, data.len() as u64);
+    }
+
+    #[tokio::test]
+    async fn test_open_read_stream() {
+        use tokio::io::AsyncReadExt;
+
+        let (store, _temp) = create_test_store().await;
+
+        let data = b"Content for streaming read";
+        let metadata = BlobMetadata::with_name("stream_read.bin");
+        let token = store.create_blob_from_bytes(data, metadata).await.unwrap();
+
+        // Fetch to make it available on disk
+        let handle = store.fetch_blob(&token, |_| {}).await.unwrap();
+
+        // Open as stream and read in chunks
+        let mut stream = handle.open_read_stream().await.unwrap();
+        let mut buf = Vec::new();
+        stream.read_to_end(&mut buf).await.unwrap();
+        assert_eq!(buf, data);
     }
 
     /// Two `NetworkedIrohBlobStore` instances discover each other via
