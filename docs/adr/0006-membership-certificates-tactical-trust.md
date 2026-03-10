@@ -451,8 +451,12 @@ Unknown or invalid certificates → reject peer, do not sync.
 |-------|--------|--------|
 | peat-btle | `src/security/genesis.rs` | MeshGenesis, MeshCredentials, BLAKE3 key derivation |
 | peat-btle | `src/security/identity.rs` | DeviceIdentity, IdentityAttestation |
-| peat-mesh | `src/security/certificate.rs` | MeshCertificate, CertificateBundle, file loading |
+| peat-mesh | `src/security/certificate.rs` | MeshCertificate, CertificateBundle, delegation chain verification |
 | peat-mesh | `src/security/enrollment.rs` | EnrollmentRequest/Response, StaticEnrollmentService |
+| peat-mesh | `src/security/genesis.rs` | MeshGenesis, MeshCredentials, MembershipPolicy, HKDF key derivation |
+| peat-mesh | `src/storage/enrollment_transport.rs` | EnrollmentProtocolHandler (`peat/enroll/1` ALPN), request_enrollment() |
+| peat-mesh | `src/storage/certificate_store.rs` | CertificateStore (CRDT-backed), hot-reload, revocation propagation |
+| peat-mesh | `src/storage/mesh_sync_transport.rs` | SyncProtocolHandler with Layer 2 certificate gating |
 | peat-mesh | `src/peer_connector.rs` | Certificate validation on PeerFound/PeerUpdated |
 | peat-mesh | `docs/trust-model.md` | Trust model documentation |
 | peat-protocol | `src/security/membership.rs` | MembershipCertificate, CertificateRegistry |
@@ -461,13 +465,15 @@ Unknown or invalid certificates → reject peer, do not sync.
 
 ### Remaining Work
 
-- [ ] MeshGenesis in peat-mesh (unified root artifact: mesh_seed → formation_secret + authority keypair + root cert)
-- [ ] Enrollment ALPN protocol handler (`peat-enroll/1` over QUIC)
-- [ ] CRDT certificate document (Automerge-based cert gossip)
-- [ ] CertificateBundle hot-reload from CRDT changes
-- [ ] Two-phase PeerConnector (allow Layer 0 transport without cert, gate Layer 2 on cert)
-- [ ] Delegation chain verification (ENROLL permission check before accepting delegated certs)
-- [ ] Certificate revocation propagation via CRDT
+- [x] MeshGenesis in peat-mesh (`src/security/genesis.rs`)
+- [x] Enrollment ALPN protocol handler (`src/storage/enrollment_transport.rs`, `peat/enroll/1`)
+- [x] CRDT certificate document (`src/storage/certificate_store.rs`)
+- [x] CertificateBundle hot-reload from CRDT changes (`CertificateStore::watch_and_reload()`)
+- [x] Two-phase connection gating (Layer 2 cert validation in `SyncProtocolHandler`)
+- [x] Delegation chain verification (ENROLL permission check in `CertificateBundle::is_trusted_issuer()`)
+- [x] Certificate revocation propagation via CRDT (`CertificateStore::publish_revocation()`)
+- [ ] Integration wiring in `peat-mesh-node` binary (register enrollment ALPN + certificate store)
+- [ ] End-to-end enrollment flow test (node → authority → cert → CRDT propagation)
 
 ### Related Issues
 
