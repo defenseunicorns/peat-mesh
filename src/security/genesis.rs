@@ -32,7 +32,7 @@
 //! let mesh_id = genesis.mesh_id();             // e.g., "A1B2C3D4"
 //! let formation_secret = genesis.formation_secret();  // 32 bytes
 //! let authority = genesis.authority();          // DeviceKeypair
-//! let root_cert = genesis.root_certificate();  // self-signed MeshCertificate
+//! let root_cert = genesis.root_certificate("authority-0");  // self-signed MeshCertificate
 //! ```
 
 use rand_core::{OsRng, RngCore};
