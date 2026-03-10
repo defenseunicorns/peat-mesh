@@ -544,4 +544,128 @@ mod tests {
         // (unchecked add doesn't remove), but the revocation prevents re-add on reload
         assert!(b.validate_node_id("node-b", now_ms()));
     }
+
+    /// End-to-end enrollment flow: request → service issues cert → publish to
+    /// CRDT → bundle validates → revoke → bundle rejects on rebuild.
+    #[tokio::test]
+    async fn test_enrollment_to_crdt_flow() {
+        use crate::security::enrollment::{EnrollmentRequest, EnrollmentService, StaticEnrollmentService};
+
+        let store = make_store();
+        let authority = DeviceKeypair::generate();
+        let member = DeviceKeypair::generate();
+
+        // Authority sets up enrollment service
+        let mut svc = StaticEnrollmentService::new(
+            authority.clone(),
+            "test-mesh".to_string(),
+            3600000, // 1 hour
+        );
+        svc.add_token(b"bootstrap-123".to_vec(), MeshTier::Tactical, permissions::STANDARD);
+
+        // Member creates enrollment request
+        let request = EnrollmentRequest::new(
+            &member,
+            "test-mesh".to_string(),
+            "tac-node-1".to_string(),
+            MeshTier::Tactical,
+            b"bootstrap-123".to_vec(),
+            now_ms(),
+        );
+
+        // Service processes request → issues certificate
+        let response = svc.process_request(&request).await.unwrap();
+        assert_eq!(
+            response.status,
+            crate::security::enrollment::EnrollmentStatus::Approved
+        );
+        let cert = response.certificate.expect("approved response should have certificate");
+
+        // Verify the certificate is valid
+        assert!(cert.verify().is_ok());
+        assert_eq!(cert.node_id, "tac-node-1");
+        assert_eq!(cert.subject_public_key, member.public_key_bytes());
+
+        // Publish certificate to CRDT store
+        let cert_store = CertificateStore::new(store.clone(), &[authority.public_key_bytes()]);
+        cert_store.publish_certificate(&cert).unwrap();
+
+        // Bundle should validate the new peer
+        {
+            let bundle = cert_store.bundle();
+            let b = bundle.read().unwrap();
+            assert!(b.validate_node_id("tac-node-1", now_ms()));
+            assert_eq!(b.get_node_tier("tac-node-1"), Some(MeshTier::Tactical));
+        }
+
+        // Simulate: load from a fresh store (as another node would after sync)
+        let cert_store2 = CertificateStore::new(store.clone(), &[authority.public_key_bytes()]);
+        let loaded = cert_store2.load_all().unwrap();
+        assert_eq!(loaded, 1);
+        {
+            let bundle2 = cert_store2.bundle();
+            let b = bundle2.read().unwrap();
+            assert!(b.validate_node_id("tac-node-1", now_ms()));
+        }
+
+        // Revoke the member
+        cert_store.publish_revocation(&member.public_key_bytes(), "compromised device").unwrap();
+        cert_store.rebuild_bundle().unwrap();
+
+        // A third store loading fresh should not see the revoked cert
+        let cert_store3 = CertificateStore::new(store, &[authority.public_key_bytes()]);
+        let loaded = cert_store3.load_all().unwrap();
+        assert_eq!(loaded, 0, "revoked certificate should not be loaded");
+    }
+
+    /// Enrollment with bad token is denied.
+    #[tokio::test]
+    async fn test_enrollment_bad_token_denied() {
+        use crate::security::enrollment::{EnrollmentRequest, EnrollmentService, EnrollmentStatus, StaticEnrollmentService};
+
+        let authority = DeviceKeypair::generate();
+        let member = DeviceKeypair::generate();
+
+        let svc = StaticEnrollmentService::new(
+            authority,
+            "mesh-1".to_string(),
+            3600000,
+        );
+        // No tokens registered
+
+        let request = EnrollmentRequest::new(
+            &member,
+            "mesh-1".to_string(),
+            "rogue-node".to_string(),
+            MeshTier::Tactical,
+            b"invalid-token".to_vec(),
+            now_ms(),
+        );
+
+        let response = svc.process_request(&request).await.unwrap();
+        assert!(matches!(response.status, EnrollmentStatus::Denied { .. }));
+        assert!(response.certificate.is_none());
+    }
+
+    /// Layer 2 gating: validate_peer with EndpointId-style bytes.
+    #[test]
+    fn test_bundle_validate_peer_bytes() {
+        let store = make_store();
+        let authority = DeviceKeypair::generate();
+        let member = DeviceKeypair::generate();
+
+        let cert_store = CertificateStore::new(store, &[authority.public_key_bytes()]);
+        let cert = make_cert(&authority, &member, "node-x", MeshTier::Tactical);
+        cert_store.publish_certificate(&cert).unwrap();
+
+        let bundle = cert_store.bundle();
+        let b = bundle.read().unwrap();
+
+        // validate_peer checks subject_public_key bytes
+        assert!(b.validate_peer(&member.public_key_bytes(), now_ms()));
+
+        // Unknown key should fail
+        let unknown = DeviceKeypair::generate();
+        assert!(!b.validate_peer(&unknown.public_key_bytes(), now_ms()));
+    }
 }
