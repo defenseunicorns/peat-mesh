@@ -549,7 +549,9 @@ mod tests {
     /// CRDT → bundle validates → revoke → bundle rejects on rebuild.
     #[tokio::test]
     async fn test_enrollment_to_crdt_flow() {
-        use crate::security::enrollment::{EnrollmentRequest, EnrollmentService, StaticEnrollmentService};
+        use crate::security::enrollment::{
+            EnrollmentRequest, EnrollmentService, StaticEnrollmentService,
+        };
 
         let store = make_store();
         let authority = DeviceKeypair::generate();
@@ -561,7 +563,11 @@ mod tests {
             "test-mesh".to_string(),
             3600000, // 1 hour
         );
-        svc.add_token(b"bootstrap-123".to_vec(), MeshTier::Tactical, permissions::STANDARD);
+        svc.add_token(
+            b"bootstrap-123".to_vec(),
+            MeshTier::Tactical,
+            permissions::STANDARD,
+        );
 
         // Member creates enrollment request
         let request = EnrollmentRequest::new(
@@ -579,7 +585,9 @@ mod tests {
             response.status,
             crate::security::enrollment::EnrollmentStatus::Approved
         );
-        let cert = response.certificate.expect("approved response should have certificate");
+        let cert = response
+            .certificate
+            .expect("approved response should have certificate");
 
         // Verify the certificate is valid
         assert!(cert.verify().is_ok());
@@ -609,7 +617,9 @@ mod tests {
         }
 
         // Revoke the member
-        cert_store.publish_revocation(&member.public_key_bytes(), "compromised device").unwrap();
+        cert_store
+            .publish_revocation(&member.public_key_bytes(), "compromised device")
+            .unwrap();
         cert_store.rebuild_bundle().unwrap();
 
         // A third store loading fresh should not see the revoked cert
@@ -621,16 +631,14 @@ mod tests {
     /// Enrollment with bad token is denied.
     #[tokio::test]
     async fn test_enrollment_bad_token_denied() {
-        use crate::security::enrollment::{EnrollmentRequest, EnrollmentService, EnrollmentStatus, StaticEnrollmentService};
+        use crate::security::enrollment::{
+            EnrollmentRequest, EnrollmentService, EnrollmentStatus, StaticEnrollmentService,
+        };
 
         let authority = DeviceKeypair::generate();
         let member = DeviceKeypair::generate();
 
-        let svc = StaticEnrollmentService::new(
-            authority,
-            "mesh-1".to_string(),
-            3600000,
-        );
+        let svc = StaticEnrollmentService::new(authority, "mesh-1".to_string(), 3600000);
         // No tokens registered
 
         let request = EnrollmentRequest::new(

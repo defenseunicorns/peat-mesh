@@ -59,7 +59,13 @@ impl MdnsDiscovery {
 
         let host_label = node_id
             .chars()
-            .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+            .map(|c| {
+                if c.is_ascii_alphanumeric() || c == '-' {
+                    c
+                } else {
+                    '-'
+                }
+            })
             .collect::<String>();
         let hostname = format!("{}.local.", host_label);
 

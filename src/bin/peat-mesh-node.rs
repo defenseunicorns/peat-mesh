@@ -223,8 +223,7 @@ async fn run() -> anyhow::Result<()> {
     coordinator.set_channel_manager(channel_manager);
 
     // ── Sync protocol handler (for incoming QUIC connections) ───
-    let mut sync_handler =
-        SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
+    let mut sync_handler = SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
 
     // Wire Layer 2 certificate gating if configured
     if let Some(ref bundle) = certificate_bundle {
@@ -272,8 +271,7 @@ async fn run() -> anyhow::Result<()> {
             info!(token_prefix = &token[..token.len().min(4)], tier = %mesh_tier, "Registered enrollment token");
         }
 
-        let enrollment_handler =
-            EnrollmentProtocolHandler::new(Arc::new(enrollment_service));
+        let enrollment_handler = EnrollmentProtocolHandler::new(Arc::new(enrollment_service));
         extra_protocols.push((CAP_ENROLLMENT_ALPN, Box::new(enrollment_handler)));
         info!("Enrollment ALPN (peat/enroll/1) enabled");
     }
