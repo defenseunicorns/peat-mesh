@@ -265,6 +265,173 @@ impl EnrollmentResponse {
             timestamp_ms,
         }
     }
+
+    /// Encode to wire format.
+    ///
+    /// ```text
+    /// [status:1][reason_len:2 LE][reason:N]
+    /// [has_cert:1][cert_len:2 LE][cert:M]
+    /// [has_secret:1][secret_len:2 LE][secret:P]
+    /// [timestamp:8 LE]
+    /// ```
+    pub fn encode(&self) -> Vec<u8> {
+        let mut buf = Vec::with_capacity(64);
+
+        // Status + optional reason
+        buf.push(self.status.to_byte());
+        match &self.status {
+            EnrollmentStatus::Denied { reason } | EnrollmentStatus::Revoked { reason } => {
+                let reason_bytes = reason.as_bytes();
+                buf.extend_from_slice(&(reason_bytes.len() as u16).to_le_bytes());
+                buf.extend_from_slice(reason_bytes);
+            }
+            _ => {
+                buf.extend_from_slice(&0u16.to_le_bytes());
+            }
+        }
+
+        // Certificate
+        if let Some(ref cert) = self.certificate {
+            let cert_bytes = cert.encode();
+            buf.push(1);
+            buf.extend_from_slice(&(cert_bytes.len() as u16).to_le_bytes());
+            buf.extend_from_slice(&cert_bytes);
+        } else {
+            buf.push(0);
+        }
+
+        // Formation secret
+        if let Some(ref secret) = self.formation_secret {
+            buf.push(1);
+            buf.extend_from_slice(&(secret.len() as u16).to_le_bytes());
+            buf.extend_from_slice(secret);
+        } else {
+            buf.push(0);
+        }
+
+        // Timestamp
+        buf.extend_from_slice(&self.timestamp_ms.to_le_bytes());
+
+        buf
+    }
+
+    /// Decode from wire format.
+    pub fn decode(data: &[u8]) -> Result<Self, SecurityError> {
+        // Minimum: 1 + 2 + 1 + 1 + 8 = 13
+        if data.len() < 13 {
+            return Err(SecurityError::SerializationError(format!(
+                "enrollment response too short: {} bytes (min 13)",
+                data.len()
+            )));
+        }
+
+        let mut pos = 0;
+
+        let status_byte = data[pos];
+        pos += 1;
+
+        let reason_len = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap()) as usize;
+        pos += 2;
+
+        if pos + reason_len >= data.len() {
+            return Err(SecurityError::SerializationError(
+                "enrollment response truncated at reason".to_string(),
+            ));
+        }
+
+        let reason = if reason_len > 0 {
+            String::from_utf8(data[pos..pos + reason_len].to_vec())
+                .map_err(|e| SecurityError::SerializationError(format!("invalid reason: {e}")))?
+        } else {
+            String::new()
+        };
+        pos += reason_len;
+
+        let status = match status_byte {
+            0 => EnrollmentStatus::Pending,
+            1 => EnrollmentStatus::Approved,
+            2 => EnrollmentStatus::Denied { reason },
+            3 => EnrollmentStatus::Revoked { reason },
+            _ => {
+                return Err(SecurityError::SerializationError(format!(
+                    "invalid status byte: {status_byte}"
+                )))
+            }
+        };
+
+        // Certificate
+        if pos >= data.len() {
+            return Err(SecurityError::SerializationError(
+                "enrollment response truncated at certificate flag".to_string(),
+            ));
+        }
+        let has_cert = data[pos];
+        pos += 1;
+
+        let certificate = if has_cert == 1 {
+            if pos + 2 > data.len() {
+                return Err(SecurityError::SerializationError(
+                    "enrollment response truncated at cert_len".to_string(),
+                ));
+            }
+            let cert_len = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap()) as usize;
+            pos += 2;
+            if pos + cert_len > data.len() {
+                return Err(SecurityError::SerializationError(
+                    "enrollment response truncated at certificate".to_string(),
+                ));
+            }
+            let cert = MeshCertificate::decode(&data[pos..pos + cert_len])?;
+            pos += cert_len;
+            Some(cert)
+        } else {
+            None
+        };
+
+        // Formation secret
+        if pos >= data.len() {
+            return Err(SecurityError::SerializationError(
+                "enrollment response truncated at secret flag".to_string(),
+            ));
+        }
+        let has_secret = data[pos];
+        pos += 1;
+
+        let formation_secret = if has_secret == 1 {
+            if pos + 2 > data.len() {
+                return Err(SecurityError::SerializationError(
+                    "enrollment response truncated at secret_len".to_string(),
+                ));
+            }
+            let secret_len = u16::from_le_bytes(data[pos..pos + 2].try_into().unwrap()) as usize;
+            pos += 2;
+            if pos + secret_len > data.len() {
+                return Err(SecurityError::SerializationError(
+                    "enrollment response truncated at secret".to_string(),
+                ));
+            }
+            let secret = data[pos..pos + secret_len].to_vec();
+            pos += secret_len;
+            Some(secret)
+        } else {
+            None
+        };
+
+        // Timestamp
+        if pos + 8 > data.len() {
+            return Err(SecurityError::SerializationError(
+                "enrollment response truncated at timestamp".to_string(),
+            ));
+        }
+        let timestamp_ms = u64::from_le_bytes(data[pos..pos + 8].try_into().unwrap());
+
+        Ok(Self {
+            status,
+            certificate,
+            formation_secret,
+            timestamp_ms,
+        })
+    }
 }
 
 /// Trait for enrollment service backends.
@@ -601,5 +768,94 @@ mod tests {
             .to_byte(),
             3
         );
+    }
+
+    #[test]
+    fn test_enrollment_response_approved_encode_decode() {
+        let authority = DeviceKeypair::generate();
+        let now = now_ms();
+
+        let cert = MeshCertificate::new_root(
+            &authority,
+            "DEADBEEF".to_string(),
+            "enterprise-0".to_string(),
+            MeshTier::Enterprise,
+            now,
+            now + 3600000,
+        );
+
+        let resp =
+            EnrollmentResponse::approved(cert.clone(), Some(b"formation-secret".to_vec()), now);
+        let encoded = resp.encode();
+        let decoded = EnrollmentResponse::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.status, EnrollmentStatus::Approved);
+        assert_eq!(decoded.timestamp_ms, now);
+
+        let decoded_cert = decoded.certificate.unwrap();
+        assert_eq!(decoded_cert.subject_public_key, cert.subject_public_key);
+        assert_eq!(decoded_cert.mesh_id, cert.mesh_id);
+        assert_eq!(decoded_cert.node_id, "enterprise-0");
+        assert!(decoded_cert.verify().is_ok());
+
+        assert_eq!(decoded.formation_secret, Some(b"formation-secret".to_vec()));
+    }
+
+    #[test]
+    fn test_enrollment_response_denied_encode_decode() {
+        let now = now_ms();
+        let resp = EnrollmentResponse::denied("bad token".to_string(), now);
+        let encoded = resp.encode();
+        let decoded = EnrollmentResponse::decode(&encoded).unwrap();
+
+        assert_eq!(
+            decoded.status,
+            EnrollmentStatus::Denied {
+                reason: "bad token".to_string()
+            }
+        );
+        assert!(decoded.certificate.is_none());
+        assert!(decoded.formation_secret.is_none());
+        assert_eq!(decoded.timestamp_ms, now);
+    }
+
+    #[test]
+    fn test_enrollment_response_pending_encode_decode() {
+        let now = now_ms();
+        let resp = EnrollmentResponse::pending(now);
+        let encoded = resp.encode();
+        let decoded = EnrollmentResponse::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.status, EnrollmentStatus::Pending);
+        assert!(decoded.certificate.is_none());
+        assert!(decoded.formation_secret.is_none());
+    }
+
+    #[test]
+    fn test_enrollment_response_decode_too_short() {
+        assert!(EnrollmentResponse::decode(&[0u8; 5]).is_err());
+    }
+
+    #[test]
+    fn test_enrollment_response_no_secret_encode_decode() {
+        let authority = DeviceKeypair::generate();
+        let now = now_ms();
+
+        let cert = MeshCertificate::new_root(
+            &authority,
+            "DEADBEEF".to_string(),
+            "node-1".to_string(),
+            MeshTier::Tactical,
+            now,
+            now + 3600000,
+        );
+
+        let resp = EnrollmentResponse::approved(cert, None, now);
+        let encoded = resp.encode();
+        let decoded = EnrollmentResponse::decode(&encoded).unwrap();
+
+        assert_eq!(decoded.status, EnrollmentStatus::Approved);
+        assert!(decoded.certificate.is_some());
+        assert!(decoded.formation_secret.is_none());
     }
 }
