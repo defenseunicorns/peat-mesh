@@ -159,6 +159,16 @@ impl SyncTransport for MeshSyncTransport {
 /// [`accept`](iroh::protocol::ProtocolHandler::accept), which delegates to
 /// [`MeshSyncTransport::start_sync_connection`] to set up full-duplex
 /// sync on the connection.
+///
+/// ## Two-Phase Gating (Layer 2)
+///
+/// When a [`CertificateBundle`] is configured, incoming connections are
+/// validated against it before sync begins. This is "Layer 2" of the
+/// two-phase connection model:
+///
+/// - **Layer 0**: QUIC transport (formation_secret → EndpointId)
+/// - **Layer 1**: `peat/enroll/1` ALPN (no cert required)
+/// - **Layer 2**: `cap/automerge/1` ALPN — this handler (cert required when configured)
 pub struct SyncProtocolHandler {
     transport: Arc<MeshSyncTransport>,
     coordinator: Arc<AutomergeSyncCoordinator>,
@@ -166,12 +176,19 @@ pub struct SyncProtocolHandler {
     /// When set, incoming connections must pass HMAC challenge-response
     /// before sync streams are accepted.
     formation_key: Option<FormationKey>,
+    /// Optional certificate bundle for Layer 2 peer validation.
+    /// When set, peers must have a valid, non-expired certificate.
+    certificate_bundle: Option<Arc<RwLock<crate::security::certificate::CertificateBundle>>>,
+    /// Whether to hard-reject peers without certificates (vs. warn-and-allow).
+    require_certificates: bool,
 }
 
 impl fmt::Debug for SyncProtocolHandler {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("SyncProtocolHandler")
             .field("has_formation_key", &self.formation_key.is_some())
+            .field("has_certificate_bundle", &self.certificate_bundle.is_some())
+            .field("require_certificates", &self.require_certificates)
             .finish()
     }
 }
@@ -185,6 +202,8 @@ impl SyncProtocolHandler {
             transport,
             coordinator,
             formation_key: None,
+            certificate_bundle: None,
+            require_certificates: false,
         }
     }
 
@@ -202,18 +221,66 @@ impl SyncProtocolHandler {
             transport,
             coordinator,
             formation_key: Some(formation_key),
+            certificate_bundle: None,
+            require_certificates: false,
         }
+    }
+
+    /// Enable Layer 2 certificate validation.
+    ///
+    /// When `require` is true, peers without a valid certificate in the bundle
+    /// are rejected. When false, a warning is logged but the connection proceeds.
+    pub fn with_certificate_bundle(
+        mut self,
+        bundle: Arc<RwLock<crate::security::certificate::CertificateBundle>>,
+        require: bool,
+    ) -> Self {
+        self.certificate_bundle = Some(bundle);
+        self.require_certificates = require;
+        self
     }
 }
 
 impl iroh::protocol::ProtocolHandler for SyncProtocolHandler {
     /// Handle an incoming QUIC connection on the `CAP_AUTOMERGE_ALPN` ALPN.
     ///
-    /// If a formation key is configured, runs HMAC-SHA256 challenge-response
-    /// authentication before accepting sync streams. Unauthenticated connections
-    /// are rejected.
+    /// Authentication layers (in order):
+    /// 1. **Certificate validation** (Layer 2): If a certificate bundle is
+    ///    configured, the peer's EndpointId is checked against known certificates.
+    /// 2. **Formation key** (Layer 0+): If configured, runs HMAC-SHA256
+    ///    challenge-response handshake.
+    ///
+    /// Connections failing either check are rejected (or warned, depending on
+    /// `require_certificates`).
     async fn accept(&self, connection: Connection) -> Result<(), AcceptError> {
         let peer = connection.remote_id();
+
+        // Layer 2: Certificate validation
+        if let Some(ref bundle) = self.certificate_bundle {
+            let bundle = bundle.read().unwrap_or_else(|e| e.into_inner());
+            let now = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_millis() as u64)
+                .unwrap_or(0);
+            let peer_valid = bundle.validate_peer(peer.as_bytes(), now);
+
+            if !peer_valid {
+                if self.require_certificates {
+                    warn!(
+                        peer = %peer.fmt_short(),
+                        "peer has no valid certificate, rejecting sync connection"
+                    );
+                    connection.close(2u32.into(), b"certificate required");
+                    return Ok(());
+                }
+                debug!(
+                    peer = %peer.fmt_short(),
+                    "peer has no valid certificate (warn-and-allow mode)"
+                );
+            } else {
+                debug!(peer = %peer.fmt_short(), "peer certificate validated");
+            }
+        }
 
         // Formation key authentication
         if let Some(ref fk) = self.formation_key {

@@ -35,6 +35,12 @@ pub mod ttl_manager;
 #[cfg(feature = "automerge-backend")]
 pub mod typed_collection;
 
+// Certificate CRDT store and enrollment protocol
+#[cfg(feature = "automerge-backend")]
+pub mod certificate_store;
+#[cfg(feature = "automerge-backend")]
+pub mod enrollment_transport;
+
 // Sync coordination (extracted from peat-mesh)
 #[cfg(feature = "automerge-backend")]
 pub mod automerge_sync;
@@ -83,6 +89,16 @@ pub use sync_persistence::{
 pub use ttl_manager::TtlManager;
 #[cfg(feature = "automerge-backend")]
 pub use typed_collection::TypedCollection;
+
+// Certificate store re-exports
+#[cfg(feature = "automerge-backend")]
+pub use certificate_store::{CertificateEntry, CertificateStore, RevocationEntry};
+
+// Enrollment re-exports
+#[cfg(feature = "automerge-backend")]
+pub use enrollment_transport::{
+    request_enrollment, EnrollmentProtocolHandler, CAP_ENROLLMENT_ALPN,
+};
 
 // Sync coordination re-exports
 #[cfg(feature = "automerge-backend")]

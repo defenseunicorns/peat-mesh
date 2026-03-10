@@ -233,6 +233,15 @@ impl DiscoveryStrategy for HybridDiscovery {
         self.stop_all().await
     }
 
+    async fn advertise(&self, node_id: &str, port: u16) -> Result<()> {
+        for (name, strategy) in &self.strategies {
+            if let Err(e) = strategy.advertise(node_id, port).await {
+                warn!(strategy = %name, error = %e, "Failed to advertise via strategy");
+            }
+        }
+        Ok(())
+    }
+
     async fn discovered_peers(&self) -> Vec<PeerInfo> {
         self.all_discovered_peers().await
     }

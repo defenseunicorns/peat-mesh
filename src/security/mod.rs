@@ -10,6 +10,7 @@
 //! - [`CallsignGenerator`] - NATO phonetic callsign generation
 //! - [`MeshCertificate`] / [`CertificateBundle`] - Peer certificate validation
 //! - [`EnrollmentService`] - Mesh enrollment protocol
+//! - [`MeshGenesis`] / [`MeshCredentials`] - Mesh creation and key derivation
 //!
 //! These primitives have no domain-specific dependencies and can be used
 //! by any mesh networking application.
@@ -21,6 +22,7 @@ pub mod encryption;
 pub mod enrollment;
 pub mod error;
 pub mod formation_key;
+pub mod genesis;
 pub mod keypair;
 
 pub use callsign::{
@@ -41,6 +43,7 @@ pub use formation_key::{
     FormationAuthResult, FormationChallenge, FormationChallengeResponse, FormationKey,
     FORMATION_CHALLENGE_SIZE, FORMATION_RESPONSE_SIZE,
 };
+pub use genesis::{MembershipPolicy, MeshCredentials, MeshGenesis};
 pub use keypair::DeviceKeypair;
 
 /// Default challenge timeout in seconds

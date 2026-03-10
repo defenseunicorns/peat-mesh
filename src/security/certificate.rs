@@ -361,16 +361,21 @@ impl CertificateBundle {
 
     /// Add a certificate to the bundle.
     ///
-    /// The certificate's signature is verified against the trusted authorities.
+    /// The certificate's signature is verified, then the issuer is checked:
+    /// 1. Self-signed root certs are always accepted.
+    /// 2. Certs signed by a trusted authority are accepted.
+    /// 3. Certs signed by a node with `ENROLL` permission (delegation) are accepted,
+    ///    provided the delegating node's own certificate is valid and non-expired.
+    ///
     /// Returns an error if the issuer is not trusted or the signature is invalid.
     pub fn add_certificate(&mut self, cert: MeshCertificate) -> Result<(), SecurityError> {
         // Verify signature
         cert.verify()?;
 
-        // Check issuer is trusted (or self-signed root)
-        if !cert.is_root() && !self.authorities.contains(&cert.issuer_public_key) {
+        // Check issuer is trusted
+        if !cert.is_root() && !self.is_trusted_issuer(&cert.issuer_public_key) {
             return Err(SecurityError::CertificateError(
-                "issuer not in trusted authorities".to_string(),
+                "issuer not in trusted authorities and has no ENROLL delegation".to_string(),
             ));
         }
 
@@ -380,6 +385,30 @@ impl CertificateBundle {
         }
         self.certificates.insert(cert.subject_public_key, cert);
         Ok(())
+    }
+
+    /// Check if a public key is a trusted issuer.
+    ///
+    /// An issuer is trusted if it is:
+    /// 1. In the explicit trusted authorities list, OR
+    /// 2. A node with a valid certificate that has the `ENROLL` permission.
+    fn is_trusted_issuer(&self, issuer_key: &[u8; 32]) -> bool {
+        // Direct authority
+        if self.authorities.contains(issuer_key) {
+            return true;
+        }
+
+        // Delegation: issuer has a certificate with ENROLL permission
+        if let Some(issuer_cert) = self.certificates.get(issuer_key) {
+            if issuer_cert.has_permission(permissions::ENROLL) {
+                // Verify the delegator's cert is itself valid
+                if issuer_cert.verify().is_ok() {
+                    return true;
+                }
+            }
+        }
+
+        false
     }
 
     /// Add a certificate without validation (for loading pre-validated bundles).
@@ -994,5 +1023,89 @@ mod tests {
 
         let remaining_expired = cert.time_remaining_ms(now + 2 * one_hour_ms());
         assert_eq!(remaining_expired, 0);
+    }
+
+    #[test]
+    fn test_delegation_chain_enroll_permission() {
+        let authority = DeviceKeypair::generate();
+        let delegator = DeviceKeypair::generate();
+        let new_member = DeviceKeypair::generate();
+        let now = now_ms();
+
+        // Authority issues cert to delegator with ENROLL permission
+        let delegator_cert = make_cert(
+            &authority,
+            &delegator,
+            "delegator",
+            MeshTier::Regional,
+            permissions::STANDARD | permissions::ENROLL,
+            now,
+            now + one_hour_ms(),
+        );
+
+        // Delegator issues cert to new_member
+        let delegated_cert = MeshCertificate::new(
+            new_member.public_key_bytes(),
+            "DEADBEEF".to_string(),
+            "new-node".to_string(),
+            MeshTier::Tactical,
+            permissions::STANDARD,
+            now,
+            now + one_hour_ms(),
+            delegator.public_key_bytes(),
+        )
+        .signed(&delegator);
+
+        let mut bundle = CertificateBundle::new();
+        bundle.add_authority(authority.public_key_bytes());
+
+        // Add delegator cert first (signed by authority)
+        bundle.add_certificate(delegator_cert).unwrap();
+
+        // Add delegated cert (signed by delegator with ENROLL)
+        bundle.add_certificate(delegated_cert).unwrap();
+
+        assert!(bundle.validate_node_id("new-node", now));
+        assert!(bundle.validate_node_id("delegator", now));
+    }
+
+    #[test]
+    fn test_delegation_chain_without_enroll_rejected() {
+        let authority = DeviceKeypair::generate();
+        let non_delegator = DeviceKeypair::generate();
+        let new_member = DeviceKeypair::generate();
+        let now = now_ms();
+
+        // Authority issues cert WITHOUT ENROLL permission
+        let non_delegator_cert = make_cert(
+            &authority,
+            &non_delegator,
+            "standard-node",
+            MeshTier::Tactical,
+            permissions::STANDARD, // No ENROLL
+            now,
+            now + one_hour_ms(),
+        );
+
+        // Non-delegator tries to issue cert to new_member
+        let invalid_cert = MeshCertificate::new(
+            new_member.public_key_bytes(),
+            "DEADBEEF".to_string(),
+            "unauthorized-node".to_string(),
+            MeshTier::Tactical,
+            permissions::STANDARD,
+            now,
+            now + one_hour_ms(),
+            non_delegator.public_key_bytes(),
+        )
+        .signed(&non_delegator);
+
+        let mut bundle = CertificateBundle::new();
+        bundle.add_authority(authority.public_key_bytes());
+        bundle.add_certificate(non_delegator_cert).unwrap();
+
+        // Should be rejected — non_delegator doesn't have ENROLL
+        let result = bundle.add_certificate(invalid_cert);
+        assert!(result.is_err());
     }
 }
