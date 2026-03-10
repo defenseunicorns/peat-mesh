@@ -120,6 +120,14 @@ pub trait DiscoveryStrategy: Send + Sync {
     /// Stop discovery
     async fn stop(&mut self) -> Result<()>;
 
+    /// Advertise this node so other peers can discover it.
+    ///
+    /// Not all strategies need this (e.g., Kubernetes uses EndpointSlices),
+    /// so the default is a no-op.
+    async fn advertise(&self, _node_id: &str, _port: u16) -> Result<()> {
+        Ok(())
+    }
+
     /// Get currently discovered peers
     async fn discovered_peers(&self) -> Vec<PeerInfo>;
 

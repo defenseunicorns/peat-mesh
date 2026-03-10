@@ -161,6 +161,11 @@ async fn run() -> anyhow::Result<()> {
         "Iroh endpoint ready"
     );
 
+    // ── Advertise via discovery ──────────────────────────────────
+    if let Err(e) = discovery.advertise(&hostname, iroh_bind_port).await {
+        warn!("Failed to advertise node via discovery: {}", e);
+    }
+
     // ── Automerge document store ────────────────────────────────
     let data_dir = std::env::var("PEAT_DATA_DIR").unwrap_or_else(|_| "/data".to_string());
     let automerge_store = Arc::new(

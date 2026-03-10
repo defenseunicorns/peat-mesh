@@ -57,15 +57,22 @@ impl MdnsDiscovery {
             }
         }
 
+        let host_label = node_id
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+            .collect::<String>();
+        let hostname = format!("{}.local.", host_label);
+
         let service = ServiceInfo::new(
             &self.service_type,
             &instance_name,
-            "",
+            &hostname,
             "",
             port,
             Some(properties),
         )
-        .map_err(|e| DiscoveryError::MdnsError(e.to_string()))?;
+        .map_err(|e| DiscoveryError::MdnsError(e.to_string()))?
+        .enable_addr_auto();
 
         self.daemon
             .register(service)
@@ -260,6 +267,10 @@ impl DiscoveryStrategy for MdnsDiscovery {
         });
 
         Ok(())
+    }
+
+    async fn advertise(&self, node_id: &str, port: u16) -> Result<()> {
+        self.advertise(node_id, port, None)
     }
 
     async fn stop(&mut self) -> Result<()> {
