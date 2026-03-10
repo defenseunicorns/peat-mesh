@@ -11,8 +11,8 @@ use crate::storage::NetworkedIrohBlobStore;
 use hkdf::Hkdf;
 use iroh::{EndpointAddr, EndpointId, SecretKey, TransportAddr};
 use sha2::Sha256;
-use std::sync::Arc;
-use tokio::sync::{mpsc, RwLock};
+use std::sync::{Arc, RwLock};
+use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tracing::{debug, info, warn};
 
@@ -102,7 +102,7 @@ impl PeerConnector {
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap()
                                 .as_millis() as u64;
-                            let bundle = bundle.read().await;
+                            let bundle = bundle.read().unwrap_or_else(|e| e.into_inner());
                             if !bundle.validate_node_id(&peer_info.node_id, now) {
                                 if self.require_certificates {
                                     warn!(
@@ -170,25 +170,27 @@ impl PeerConnector {
                         }
 
                         // Re-validate certificate on update
-                        if let Some(ref bundle) = self.certificate_bundle {
+                        let should_remove = if let Some(ref bundle) = self.certificate_bundle {
                             let now = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
                                 .unwrap()
                                 .as_millis() as u64;
-                            let bundle = bundle.read().await;
-                            if !bundle.validate_node_id(&peer_info.node_id, now)
+                            let bundle = bundle.read().unwrap_or_else(|e| e.into_inner());
+                            !bundle.validate_node_id(&peer_info.node_id, now)
                                 && self.require_certificates
-                            {
-                                warn!(
-                                    peer = %peer_info.node_id,
-                                    "Removing peer on update: certificate no longer valid"
-                                );
-                                self.blob_store
-                                    .static_provider()
-                                    .remove_endpoint_info(endpoint_id);
-                                self.blob_store.remove_peer(&endpoint_id).await;
-                                continue;
-                            }
+                        } else {
+                            false
+                        };
+                        if should_remove {
+                            warn!(
+                                peer = %peer_info.node_id,
+                                "Removing peer on update: certificate no longer valid"
+                            );
+                            self.blob_store
+                                .static_provider()
+                                .remove_endpoint_info(endpoint_id);
+                            self.blob_store.remove_peer(&endpoint_id).await;
+                            continue;
                         }
 
                         let addrs: std::collections::BTreeSet<TransportAddr> = peer_info

@@ -12,8 +12,9 @@ use peat_mesh::peer_connector::PeerConnector;
 use peat_mesh::qos::{start_periodic_gc, DeletionPolicyRegistry, GarbageCollector, GcConfig};
 use peat_mesh::security::{DeviceKeypair, FormationKey};
 use peat_mesh::storage::{
-    AutomergeStore, AutomergeSyncCoordinator, MeshSyncTransport, NetworkedIrohBlobStore,
-    SyncChannelManager, SyncProtocolHandler, SyncTransport, CAP_AUTOMERGE_ALPN,
+    AutomergeStore, AutomergeSyncCoordinator, CertificateStore, EnrollmentProtocolHandler,
+    MeshSyncTransport, NetworkedIrohBlobStore, SyncChannelManager, SyncProtocolHandler,
+    SyncTransport, CAP_AUTOMERGE_ALPN, CAP_ENROLLMENT_ALPN,
 };
 use peat_mesh::transport::{
     LiteMeshTransport, LiteMessageType, LiteTransportConfig, MeshTransport, OtaSender,
@@ -65,11 +66,21 @@ async fn run() -> anyhow::Result<()> {
         })
         .unwrap_or_default();
 
+    // ── Certificate / enrollment env vars ──────────────────────
+    let authority_key_hex = std::env::var("PEAT_AUTHORITY_KEY").ok();
+    let require_certificates = std::env::var("PEAT_REQUIRE_CERTIFICATES")
+        .map(|v| v == "true" || v == "1")
+        .unwrap_or(false);
+    let enrollment_tokens_raw = std::env::var("PEAT_ENROLLMENT_TOKENS").ok();
+
     info!(
         hostname = %hostname,
         discovery = %discovery_mode,
         broker_port = broker_port,
         iroh_bind_port = iroh_bind_port,
+        certificates = authority_key_hex.is_some(),
+        require_certificates,
+        enrollment = enrollment_tokens_raw.is_some(),
         "Starting peat-mesh-node"
     );
 
@@ -157,6 +168,29 @@ async fn run() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("Failed to open AutomergeStore: {}", e))?,
     );
 
+    // ── Certificate store (ADR-0006) ────────────────────────────
+    let cert_store: Option<Arc<CertificateStore>> = if let Some(ref auth_hex) = authority_key_hex {
+        let auth_bytes = hex::decode(auth_hex)
+            .map_err(|e| anyhow::anyhow!("Invalid PEAT_AUTHORITY_KEY hex: {}", e))?;
+        if auth_bytes.len() != 32 {
+            anyhow::bail!(
+                "PEAT_AUTHORITY_KEY must be 32 bytes (64 hex chars), got {}",
+                auth_bytes.len()
+            );
+        }
+        let mut auth_key = [0u8; 32];
+        auth_key.copy_from_slice(&auth_bytes);
+
+        let store = Arc::new(CertificateStore::new(automerge_store.clone(), &[auth_key]));
+        let loaded = store.load_all().unwrap_or(0);
+        info!(authority = %auth_hex, loaded, "Certificate store initialized");
+        Some(store)
+    } else {
+        None
+    };
+
+    let certificate_bundle = cert_store.as_ref().map(|cs| cs.bundle());
+
     // ── Garbage collector (ADR-034 Phase 3) ────────────────────
     let gc_policy_registry = Arc::new(DeletionPolicyRegistry::with_defaults());
     let gc = Arc::new(GarbageCollector::with_policy_registry(
@@ -184,15 +218,68 @@ async fn run() -> anyhow::Result<()> {
     coordinator.set_channel_manager(channel_manager);
 
     // ── Sync protocol handler (for incoming QUIC connections) ───
-    let sync_handler = SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
+    let mut sync_handler =
+        SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
 
-    // ── Create networked blob store with sync protocol ──────────
+    // Wire Layer 2 certificate gating if configured
+    if let Some(ref bundle) = certificate_bundle {
+        sync_handler = sync_handler.with_certificate_bundle(bundle.clone(), require_certificates);
+        info!(
+            require = require_certificates,
+            "Layer 2 certificate gating enabled on sync protocol"
+        );
+    }
+
+    // ── Enrollment protocol handler (Layer 1) ────────────────────
+    let mut extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)> =
+        vec![(CAP_AUTOMERGE_ALPN, Box::new(sync_handler))];
+
+    if let Some(ref tokens_raw) = enrollment_tokens_raw {
+        let mesh_id = hostname.clone(); // Use hostname as mesh_id for now
+        let authority_kp = DeviceKeypair::from_seed(&seed, "peat-mesh:authority-keypair")
+            .map_err(|e| anyhow::anyhow!("Authority keypair derivation failed: {}", e))?;
+
+        let mut enrollment_service = peat_mesh::security::StaticEnrollmentService::new(
+            authority_kp,
+            mesh_id,
+            24 * 60 * 60 * 1000, // 24-hour validity
+        );
+
+        // Parse tokens: "token1=tactical,token2=edge"
+        for entry in tokens_raw.split(',') {
+            let entry = entry.trim();
+            if entry.is_empty() {
+                continue;
+            }
+            let parts: Vec<&str> = entry.splitn(2, '=').collect();
+            let (token, tier) = if parts.len() == 2 {
+                (parts[0], parts[1])
+            } else {
+                (parts[0], "tactical")
+            };
+            let mesh_tier = peat_mesh::security::MeshTier::from_str_name(tier)
+                .unwrap_or(peat_mesh::security::MeshTier::Tactical);
+            enrollment_service.add_token(
+                token.as_bytes().to_vec(),
+                mesh_tier,
+                peat_mesh::security::certificate::permissions::STANDARD,
+            );
+            info!(token_prefix = &token[..token.len().min(4)], tier = %mesh_tier, "Registered enrollment token");
+        }
+
+        let enrollment_handler =
+            EnrollmentProtocolHandler::new(Arc::new(enrollment_service));
+        extra_protocols.push((CAP_ENROLLMENT_ALPN, Box::new(enrollment_handler)));
+        info!("Enrollment ALPN (peat/enroll/1) enabled");
+    }
+
+    // ── Create networked blob store with protocols ───────────────
     let blob_dir = std::env::temp_dir().join(format!("peat_iroh_blobs_{}", hostname));
     let blob_store = NetworkedIrohBlobStore::from_endpoint_with_protocols(
         blob_dir,
         endpoint,
         static_provider,
-        vec![(CAP_AUTOMERGE_ALPN, Box::new(sync_handler))],
+        extra_protocols,
     )
     .await
     .map_err(|e| anyhow::anyhow!("Failed to create networked blob store: {}", e))?;
@@ -220,8 +307,20 @@ async fn run() -> anyhow::Result<()> {
     info!(node_id = %mesh.node_id(), device_id = %device_id, "Mesh started");
 
     // ── Spawn PeerConnector ──────────────────────────────────────
-    let connector = PeerConnector::new(seed.clone(), blob_store.clone());
+    let mut connector = PeerConnector::new(seed.clone(), blob_store.clone());
+    if let Some(ref bundle) = certificate_bundle {
+        connector = connector.with_certificate_bundle(bundle.clone(), require_certificates);
+    }
     let _connector_handle = connector.run(event_stream);
+
+    // ── Spawn certificate hot-reload watcher ─────────────────────
+    if let Some(ref cs) = cert_store {
+        let cs_clone = cs.clone();
+        tokio::spawn(async move {
+            cs_clone.watch_and_reload().await;
+        });
+        info!("Certificate hot-reload watcher started");
+    }
 
     // ── Spawn sync polling task ─────────────────────────────────
     // Periodically sync all documents with connected peers.
