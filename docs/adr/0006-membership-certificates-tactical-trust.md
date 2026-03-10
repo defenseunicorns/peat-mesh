@@ -472,8 +472,8 @@ Unknown or invalid certificates → reject peer, do not sync.
 - [x] Two-phase connection gating (Layer 2 cert validation in `SyncProtocolHandler`)
 - [x] Delegation chain verification (ENROLL permission check in `CertificateBundle::is_trusted_issuer()`)
 - [x] Certificate revocation propagation via CRDT (`CertificateStore::publish_revocation()`)
-- [ ] Integration wiring in `peat-mesh-node` binary (register enrollment ALPN + certificate store)
-- [ ] End-to-end enrollment flow test (node → authority → cert → CRDT propagation)
+- [x] Integration wiring in `peat-mesh-node` binary (register enrollment ALPN + certificate store)
+- [x] End-to-end enrollment flow test (node → authority → cert → CRDT propagation)
 
 ### Related Issues
 
