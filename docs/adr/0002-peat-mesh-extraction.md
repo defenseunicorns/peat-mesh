@@ -5,7 +5,7 @@
 **Status**: IMPLEMENTED (All 8 Phases Complete — PRs #622-#629)
 **Date**: 2025-01-31 (proposed) / 2026-02-12 (completed)
 **Authors**: Kit Plummer, Codex  
-**Organization**: (r)evolve - Revolve Team LLC (https://revolveteam.com)  
+**Organization**: Defense Unicorns (https://defenseunicorns.com)  
 **Priority**: URGENT - Blocking for Defense Unicorns transition  
 **Relates To**: ADR-011 (Automerge + Iroh), ADR-032 (Pluggable Transport), ADR-039 (peat-btle), ADR-041 (Multi-Transport Embedded)
 
@@ -79,7 +79,7 @@ Clean separation where peat-mesh is a standalone, reusable sync layer:
 │  │   Iroh (QUIC)  │  peat-btle (BLE)  │  Future: LoRa     │   │
 │  └─────────────────────────────────────────────────────────┘   │
 │                                                                  │
-│           NO PEAT SEMANTICS - sync arbitrary documents          │
+│           NO Peat SEMANTICS - sync arbitrary documents          │
 └─────────────────────────────────────────────────────────────────┘
 ```
 

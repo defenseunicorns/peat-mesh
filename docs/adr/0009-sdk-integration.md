@@ -5,7 +5,7 @@
 **Status**: Proposed  
 **Date**: 2025-01-31  
 **Authors**: Kit Plummer, Codex  
-**Organization**: (r)evolve - Revolve Team LLC (https://revolveteam.com)  
+**Organization**: Defense Unicorns (https://defenseunicorns.com)  
 **Depends On**: ADR-049 (Schema Extraction)  
 **Relates To**: ADR-043 (Consumer Interface Adapters - Compatibility Path)
 
