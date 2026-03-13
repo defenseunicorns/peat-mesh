@@ -5,7 +5,7 @@
 **Status**: Proposed  
 **Date**: 2026-01-06 (Updated: 2025-01-31)  
 **Authors**: Kit Plummer, Codex  
-**Organization**: (r)evolve - Revolve Team LLC (https://revolveteam.com)  
+**Organization**: Defense Unicorns (https://defenseunicorns.com)  
 **Related ADRs**:
 - [ADR-029](029-tak-transport-adapter.md) (TAK Transport Adapter)
 - [ADR-032](032-pluggable-transport-abstraction.md) (Pluggable Transport Abstraction)
