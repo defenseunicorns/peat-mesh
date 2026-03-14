@@ -199,13 +199,13 @@ impl CertificateStore {
 
             match entry.to_certificate() {
                 Ok(cert) => {
-                    if let Err(e) = bundle.add_certificate(cert.clone()) {
-                        debug!(
+                    if let Err(e) = bundle.add_certificate(cert) {
+                        warn!(
                             subject = %entry.subject,
                             error = %e,
-                            "adding cert unchecked during load"
+                            "skipping certificate during load (validation failed)"
                         );
-                        bundle.add_certificate_unchecked(cert);
+                        continue;
                     }
                     count += 1;
                 }
@@ -259,13 +259,13 @@ impl CertificateStore {
             Ok(Some(entry)) => match entry.to_certificate() {
                 Ok(cert) => {
                     let mut bundle = self.bundle.write().unwrap_or_else(|e| e.into_inner());
-                    if let Err(e) = bundle.add_certificate(cert.clone()) {
-                        debug!(
+                    if let Err(e) = bundle.add_certificate(cert) {
+                        warn!(
                             subject = %subject_hex,
                             error = %e,
-                            "adding cert unchecked on change"
+                            "rejecting certificate on change (validation failed)"
                         );
-                        bundle.add_certificate_unchecked(cert);
+                        return;
                     }
                     debug!(subject = %subject_hex, "hot-reloaded certificate from CRDT");
                 }
@@ -332,7 +332,6 @@ impl CertificateStore {
         // a future improvement could add `authorities()` accessor.
         //
         // Workaround: just reload all certs, skip revoked ones.
-        // The bundle's add_certificate_unchecked replaces existing entries.
         let mut count = 0;
         for (_id, entry) in &entries {
             if revocations.contains(&entry.subject) {
@@ -340,7 +339,10 @@ impl CertificateStore {
             }
             match entry.to_certificate() {
                 Ok(cert) => {
-                    bundle.add_certificate_unchecked(cert);
+                    if let Err(e) = bundle.add_certificate(cert) {
+                        warn!(subject = %entry.subject, error = %e, "skipping invalid cert in rebuild");
+                        continue;
+                    }
                     count += 1;
                 }
                 Err(e) => {
