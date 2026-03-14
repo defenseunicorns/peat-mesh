@@ -839,6 +839,7 @@ impl AutomergeStore {
         self: &Arc<Self>,
         interval: std::time::Duration,
         size_threshold_bytes: usize,
+        token: tokio_util::sync::CancellationToken,
     ) {
         let store = Arc::clone(self);
         tokio::spawn(async move {
@@ -847,15 +848,22 @@ impl AutomergeStore {
             timer.tick().await;
 
             loop {
-                timer.tick().await;
-                match store.compact_above_threshold(size_threshold_bytes) {
-                    Ok((count, before, after)) => {
-                        if count > 0 {
-                            tracing::info!(count, before, after, "background compaction complete");
-                        }
+                tokio::select! {
+                    _ = token.cancelled() => {
+                        tracing::info!("background compaction cancelled");
+                        break;
                     }
-                    Err(e) => {
-                        tracing::warn!("background compaction failed: {e}");
+                    _ = timer.tick() => {
+                        match store.compact_above_threshold(size_threshold_bytes) {
+                            Ok((count, before, after)) => {
+                                if count > 0 {
+                                    tracing::info!(count, before, after, "background compaction complete");
+                                }
+                            }
+                            Err(e) => {
+                                tracing::warn!("background compaction failed: {e}");
+                            }
+                        }
                     }
                 }
             }
@@ -1454,5 +1462,24 @@ mod tests {
         let loaded = store.get("big-doc").unwrap().unwrap();
         let value = loaded.get(automerge::ROOT, "counter").unwrap().unwrap();
         assert_eq!(value.0.to_i64(), Some(199));
+    }
+
+    #[tokio::test]
+    async fn test_background_compaction_cancellation() {
+        let store = Arc::new(AutomergeStore::in_memory());
+        let token = tokio_util::sync::CancellationToken::new();
+
+        store.start_background_compaction(
+            std::time::Duration::from_millis(50),
+            1024,
+            token.clone(),
+        );
+
+        // Let it run briefly
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+        // Cancel and verify it stops (no panic, no hang)
+        token.cancel();
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
     }
 }

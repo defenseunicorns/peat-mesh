@@ -372,8 +372,13 @@ impl CertificateBundle {
         // Verify signature
         cert.verify()?;
 
+        let now_ms = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_millis() as u64;
+
         // Check issuer is trusted
-        if !cert.is_root() && !self.is_trusted_issuer(&cert.issuer_public_key) {
+        if !cert.is_root() && !self.is_trusted_issuer(&cert.issuer_public_key, now_ms) {
             return Err(SecurityError::CertificateError(
                 "issuer not in trusted authorities and has no ENROLL delegation".to_string(),
             ));
@@ -391,8 +396,8 @@ impl CertificateBundle {
     ///
     /// An issuer is trusted if it is:
     /// 1. In the explicit trusted authorities list, OR
-    /// 2. A node with a valid certificate that has the `ENROLL` permission.
-    fn is_trusted_issuer(&self, issuer_key: &[u8; 32]) -> bool {
+    /// 2. A node with a valid, non-expired certificate that has the `ENROLL` permission.
+    fn is_trusted_issuer(&self, issuer_key: &[u8; 32], now_ms: u64) -> bool {
         // Direct authority
         if self.authorities.contains(issuer_key) {
             return true;
@@ -400,7 +405,7 @@ impl CertificateBundle {
 
         // Delegation: issuer has a certificate with ENROLL permission
         if let Some(issuer_cert) = self.certificates.get(issuer_key) {
-            if issuer_cert.has_permission(permissions::ENROLL) {
+            if issuer_cert.has_permission(permissions::ENROLL) && issuer_cert.is_valid(now_ms) {
                 // Verify the delegator's cert is itself valid
                 if issuer_cert.verify().is_ok() {
                     return true;
@@ -1106,6 +1111,47 @@ mod tests {
 
         // Should be rejected — non_delegator doesn't have ENROLL
         let result = bundle.add_certificate(invalid_cert);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_delegation_rejected_when_issuer_expired() {
+        let authority = DeviceKeypair::generate();
+        let delegator = DeviceKeypair::generate();
+        let new_member = DeviceKeypair::generate();
+        let now = now_ms();
+
+        // Authority issues cert to delegator with ENROLL, but it expired an hour ago
+        let delegator_cert = make_cert(
+            &authority,
+            &delegator,
+            "delegator",
+            MeshTier::Regional,
+            permissions::STANDARD | permissions::ENROLL,
+            now - 2 * one_hour_ms(),
+            now - one_hour_ms(), // already expired
+        );
+
+        let mut bundle = CertificateBundle::new();
+        bundle.add_authority(authority.public_key_bytes());
+        // Use unchecked to force the expired cert into the bundle
+        bundle.add_certificate_unchecked(delegator_cert);
+
+        // Delegator tries to issue cert to new_member
+        let delegated_cert = MeshCertificate::new(
+            new_member.public_key_bytes(),
+            "DEADBEEF".to_string(),
+            "new-node".to_string(),
+            MeshTier::Tactical,
+            permissions::STANDARD,
+            now,
+            now + one_hour_ms(),
+            delegator.public_key_bytes(),
+        )
+        .signed(&delegator);
+
+        // Should be rejected — delegator's cert is expired
+        let result = bundle.add_certificate(delegated_cert);
         assert!(result.is_err());
     }
 }
