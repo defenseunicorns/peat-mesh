@@ -137,6 +137,29 @@ bash .goa
 - **GitHub**: [peat-mesh](https://github.com/defenseunicorns/peat-mesh)
 - **crates.io**: [peat-mesh](https://crates.io/crates/peat-mesh)
 
+## Roadmap
+
+**Phase 1 — Complete**
+- P2P topology with QUIC/Iroh transport
+- Automerge CRDT sync with negentropy reconciliation
+- Ed25519 identity, X25519 key exchange, ChaCha20-Poly1305 encryption
+- Certificate-based enrollment and tactical trust hierarchy ([ADR-0006](docs/adr/0006-membership-certificates-tactical-trust.md))
+- Kubernetes deployment with EndpointSlice discovery ([ADR-0001](docs/adr/0001-kubernetes-istio-deployment.md))
+- Streaming blob transfer with checkpoint/resume ([ADR-055](docs/adr/055-streaming-blob-transfer.md))
+- mDNS and hybrid peer discovery ([ADR-0003](docs/adr/0003-peer-discovery-architecture.md))
+- Graceful shutdown, lock ordering, operation timeouts
+
+**Phase 2 — Planned**
+- MLS group key agreement for forward secrecy ([ADR-0005](docs/adr/0005-e2e-encryption-key-management.md))
+- DHT peer discovery via Iroh/Pkarr ([ADR-0010](docs/adr/0010-dht-peer-discovery.md))
+- Full PACE transport failover wiring ([ADR-0004](docs/adr/0004-pluggable-transport-abstraction.md))
+- Zarf/UDS integration patterns ([ADR-0008](docs/adr/0008-zarf-uds-integration.md))
+
+**Phase 3 — Future**
+- Multi-language SDK: Go, Python, Kotlin bindings ([ADR-0009](docs/adr/0009-sdk-integration.md))
+- Signed CRDT operations for mutation attribution
+- Formal benchmark suite
+
 ## License
 
 Apache-2.0
