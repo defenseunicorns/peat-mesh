@@ -261,7 +261,7 @@ impl EvictionController {
             if self
                 .protected_docs
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .contains(&candidate.doc_id)
             {
                 continue;
@@ -394,7 +394,7 @@ impl EvictionController {
     pub fn mark_protected(&self, doc_id: &str) {
         self.protected_docs
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(doc_id.to_string());
         self.storage.mark_protected(doc_id);
 

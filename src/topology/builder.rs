@@ -346,7 +346,7 @@ impl TopologyBuilder {
                     // Check partition and emit events if state changed
                     if let Some(_event) = partition_detector
                         .lock()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .check_partition(&beacons_map)
                     {
                         // PartitionDetector already notifies the PartitionHandler

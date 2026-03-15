@@ -277,7 +277,7 @@ impl EvictionAuditLog {
     pub fn get_in_range(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Vec<AuditEntry> {
         self.entries
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| e.timestamp >= start && e.timestamp <= end)
             .cloned()
@@ -288,7 +288,7 @@ impl EvictionAuditLog {
     pub fn get_by_class(&self, class: QoSClass) -> Vec<AuditEntry> {
         self.entries
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| e.qos_class == class)
             .cloned()
@@ -299,7 +299,7 @@ impl EvictionAuditLog {
     pub fn get_by_action(&self, action: AuditAction) -> Vec<AuditEntry> {
         self.entries
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .iter()
             .filter(|e| e.action == action)
             .cloned()

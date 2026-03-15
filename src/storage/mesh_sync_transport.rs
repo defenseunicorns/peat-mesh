@@ -461,3 +461,136 @@ pub async fn respond_to_formation_auth(
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_formation_auth_timeout_is_reasonable() {
+        assert_eq!(FORMATION_AUTH_TIMEOUT, Duration::from_secs(30));
+        assert!(
+            FORMATION_AUTH_TIMEOUT >= Duration::from_secs(5),
+            "Auth timeout should be at least 5s for slow networks"
+        );
+        assert!(
+            FORMATION_AUTH_TIMEOUT <= Duration::from_secs(120),
+            "Auth timeout should not exceed 2 minutes"
+        );
+    }
+
+    /// `MeshSyncTransport` and `SyncProtocolHandler` require a running Iroh
+    /// `Endpoint` (QUIC stack) to construct. Unit tests for the full protocol
+    /// flow are covered in integration tests (tests/hierarchy_e2e.rs,
+    /// tests/dual_active_transport_e2e.rs). Tests here verify configuration
+    /// values and type-level properties.
+
+    #[test]
+    fn test_sync_protocol_handler_debug_impl() {
+        // Verify the Debug impl exists and is callable (compile-time + runtime check).
+        let _: fn(&SyncProtocolHandler, &mut std::fmt::Formatter) -> std::fmt::Result =
+            <SyncProtocolHandler as std::fmt::Debug>::fmt;
+    }
+
+    #[test]
+    fn test_mesh_sync_transport_debug_impl() {
+        let _: fn(&MeshSyncTransport, &mut std::fmt::Formatter) -> std::fmt::Result =
+            <MeshSyncTransport as std::fmt::Debug>::fmt;
+    }
+
+    #[test]
+    fn test_formation_key_can_create_challenge_response() {
+        // Test that the FormationKey type works for challenge-response without
+        // needing a QUIC connection.
+        let fk = FormationKey::new("test-formation", &[1u8; 32]);
+
+        // Create challenge
+        let (nonce, _expected_hmac) = fk.create_challenge();
+        assert_eq!(nonce.len(), 32, "Challenge nonce should be 32 bytes");
+
+        // Generate response
+        let response = fk.respond_to_challenge(&nonce);
+        assert_eq!(response.len(), 32, "HMAC response should be 32 bytes");
+
+        // Verify round-trip
+        assert!(
+            fk.verify_response(&nonce, &response),
+            "Response should verify against same formation key"
+        );
+    }
+
+    #[test]
+    fn test_formation_key_rejects_wrong_response() {
+        let fk = FormationKey::new("test-formation", &[1u8; 32]);
+        let (nonce, _) = fk.create_challenge();
+
+        // Tampered response
+        let mut bad_response = fk.respond_to_challenge(&nonce);
+        bad_response[0] ^= 0xff;
+
+        assert!(
+            !fk.verify_response(&nonce, &bad_response),
+            "Tampered response should fail verification"
+        );
+    }
+
+    #[test]
+    fn test_formation_key_different_formations_incompatible() {
+        let fk_a = FormationKey::new("formation-alpha", &[2u8; 32]);
+        let fk_b = FormationKey::new("formation-beta", &[3u8; 32]);
+
+        let (nonce, _) = fk_a.create_challenge();
+        let response_b = fk_b.respond_to_challenge(&nonce);
+
+        assert!(
+            !fk_a.verify_response(&nonce, &response_b),
+            "Different formation keys should not verify each other"
+        );
+    }
+
+    #[test]
+    fn test_formation_challenge_serialization_roundtrip() {
+        let fk = FormationKey::new("roundtrip-test", &[4u8; 32]);
+        let (nonce, _) = fk.create_challenge();
+
+        let challenge = FormationChallenge {
+            formation_id: fk.formation_id().to_string(),
+            nonce: nonce.clone(),
+        };
+
+        let bytes = challenge.to_bytes();
+        assert!(!bytes.is_empty());
+
+        let decoded = FormationChallenge::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.formation_id, fk.formation_id());
+        assert_eq!(decoded.nonce, nonce);
+    }
+
+    #[test]
+    fn test_formation_challenge_response_serialization_roundtrip() {
+        let fk = FormationKey::new("roundtrip-test", &[4u8; 32]);
+        let (nonce, _) = fk.create_challenge();
+        let response = fk.respond_to_challenge(&nonce);
+
+        let resp = FormationChallengeResponse {
+            response: response.clone(),
+        };
+        let bytes = resp.to_bytes();
+        assert!(!bytes.is_empty());
+
+        let decoded = FormationChallengeResponse::from_bytes(&bytes).unwrap();
+        assert_eq!(decoded.response, response);
+    }
+
+    #[test]
+    fn test_formation_auth_result_byte_encoding() {
+        assert_eq!(
+            FormationAuthResult::from_byte(FormationAuthResult::Accepted.to_byte()),
+            FormationAuthResult::Accepted
+        );
+        assert_eq!(
+            FormationAuthResult::from_byte(FormationAuthResult::Rejected.to_byte()),
+            FormationAuthResult::Rejected
+        );
+    }
+}

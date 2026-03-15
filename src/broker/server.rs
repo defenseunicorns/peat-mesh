@@ -20,7 +20,9 @@ pub struct BrokerConfig {
 impl Default for BrokerConfig {
     fn default() -> Self {
         Self {
-            bind_addr: "0.0.0.0:8081".parse().unwrap(),
+            bind_addr: "0.0.0.0:8081"
+                .parse()
+                .expect("static bind address is valid"),
             timeout_secs: 30,
         }
     }

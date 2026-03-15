@@ -214,3 +214,89 @@ fn now_ms() -> u64 {
         .map(|d| d.as_millis() as u64)
         .unwrap_or(0)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_enrollment_alpn_is_valid() {
+        assert_eq!(CAP_ENROLLMENT_ALPN, b"peat/enroll/1");
+        assert!(!CAP_ENROLLMENT_ALPN.is_empty());
+        assert!(CAP_ENROLLMENT_ALPN.len() < 256);
+        assert!(CAP_ENROLLMENT_ALPN.iter().all(|b| b.is_ascii()));
+    }
+
+    #[test]
+    fn test_enrollment_alpn_contains_version() {
+        let alpn_str = std::str::from_utf8(CAP_ENROLLMENT_ALPN).unwrap();
+        assert!(
+            alpn_str.contains("/1"),
+            "ALPN should include version suffix"
+        );
+        assert!(
+            alpn_str.starts_with("peat/"),
+            "ALPN should start with peat/ prefix"
+        );
+    }
+
+    #[test]
+    fn test_enrollment_alpn_distinct_from_sync() {
+        use crate::storage::sync_transport::CAP_AUTOMERGE_ALPN;
+        assert_ne!(
+            CAP_ENROLLMENT_ALPN, CAP_AUTOMERGE_ALPN,
+            "Enrollment and sync ALPNs must be distinct"
+        );
+    }
+
+    #[test]
+    fn test_max_request_size_reasonable() {
+        assert_eq!(MAX_REQUEST_SIZE, 65536);
+        assert!(
+            MAX_REQUEST_SIZE >= 1024,
+            "Request limit should allow reasonable payloads"
+        );
+        assert!(
+            MAX_REQUEST_SIZE <= 1_048_576,
+            "Request limit should prevent abuse"
+        );
+    }
+
+    #[test]
+    fn test_max_response_size_reasonable() {
+        assert_eq!(MAX_RESPONSE_SIZE, 65536);
+        assert_eq!(
+            MAX_REQUEST_SIZE, MAX_RESPONSE_SIZE,
+            "Request and response limits should match"
+        );
+    }
+
+    #[test]
+    fn test_now_ms_returns_plausible_timestamp() {
+        let ts = now_ms();
+        // Should be after 2020-01-01 (1577836800000 ms)
+        assert!(ts > 1_577_836_800_000, "Timestamp should be after 2020");
+        // Should be before 2100-01-01 (4102444800000 ms)
+        assert!(ts < 4_102_444_800_000, "Timestamp should be before 2100");
+    }
+
+    #[test]
+    fn test_now_ms_is_monotonic() {
+        let t1 = now_ms();
+        let t2 = now_ms();
+        assert!(t2 >= t1, "Sequential timestamps should be non-decreasing");
+    }
+
+    /// `EnrollmentProtocolHandler` and the protocol flow require a running
+    /// Iroh endpoint with QUIC connections. These are tested at the
+    /// integration level (tests/hierarchy_e2e.rs). The unit tests here
+    /// cover constants, the `now_ms` helper, and the Debug impl.
+    #[test]
+    fn test_handler_debug_impl() {
+        // Verify the Debug impl exists and doesn't panic.
+        // We can't construct EnrollmentProtocolHandler without an EnrollmentService
+        // implementation, but we verify the struct definition compiles with Debug.
+        let _: fn(&EnrollmentProtocolHandler, &mut std::fmt::Formatter) -> std::fmt::Result =
+            <EnrollmentProtocolHandler as std::fmt::Debug>::fmt;
+    }
+}

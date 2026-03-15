@@ -45,3 +45,30 @@ pub trait SyncRouter: Send + Sync + 'static {
     /// Whether this node is the cell leader.
     async fn is_leader(&self) -> bool;
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_alpn_identifier_is_valid() {
+        assert_eq!(CAP_AUTOMERGE_ALPN, b"cap/automerge/1");
+        assert!(!CAP_AUTOMERGE_ALPN.is_empty());
+        // ALPN identifiers must be ASCII and reasonably short
+        assert!(CAP_AUTOMERGE_ALPN.len() < 256);
+        assert!(CAP_AUTOMERGE_ALPN.iter().all(|b| b.is_ascii()));
+    }
+
+    #[test]
+    fn test_alpn_contains_version() {
+        let alpn_str = std::str::from_utf8(CAP_AUTOMERGE_ALPN).unwrap();
+        assert!(
+            alpn_str.contains("/1"),
+            "ALPN should include version suffix"
+        );
+        assert!(
+            alpn_str.starts_with("cap/"),
+            "ALPN should start with protocol prefix"
+        );
+    }
+}

@@ -92,10 +92,13 @@ pub async fn upload_firmware(
                 total_chunks,
                 version,
             };
-            Ok((
-                StatusCode::ACCEPTED,
-                Json(serde_json::to_value(response).unwrap()),
-            ))
+            let json = serde_json::to_value(response).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("failed to serialize response: {}", e)})),
+                )
+            })?;
+            Ok((StatusCode::ACCEPTED, Json(json)))
         }
         Err(e) => Err((
             StatusCode::INTERNAL_SERVER_ERROR,
@@ -110,7 +113,15 @@ pub async fn ota_status(
     Path(peer_id): Path<String>,
 ) -> Result<Json<Value>, (StatusCode, Json<Value>)> {
     match state.sender.get_status(&peer_id).await {
-        Some(info) => Ok(Json(serde_json::to_value(info).unwrap())),
+        Some(info) => {
+            let json = serde_json::to_value(info).map_err(|e| {
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    Json(json!({"error": format!("failed to serialize status: {}", e)})),
+                )
+            })?;
+            Ok(Json(json))
+        }
         None => Err((
             StatusCode::NOT_FOUND,
             Json(json!({"error": format!("no OTA session for peer: {}", peer_id)})),
@@ -135,5 +146,65 @@ mod tests {
         assert!(json.contains("\"session_id\":1"));
         assert!(json.contains("lite-4D355443"));
         assert!(json.contains("\"firmware_size\":1024"));
+    }
+
+    #[test]
+    fn test_ota_upload_response_all_fields_present() {
+        let resp = OtaUploadResponse {
+            session_id: 42,
+            peer_id: "peer-xyz".to_string(),
+            firmware_size: 3_145_728,
+            total_chunks: 768,
+            version: "1.0.0-rc1".to_string(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["session_id"], 42);
+        assert_eq!(json["peer_id"], "peer-xyz");
+        assert_eq!(json["firmware_size"], 3_145_728);
+        assert_eq!(json["total_chunks"], 768);
+        assert_eq!(json["version"], "1.0.0-rc1");
+    }
+
+    #[test]
+    fn test_ota_upload_response_debug_impl() {
+        let resp = OtaUploadResponse {
+            session_id: 1,
+            peer_id: "p".to_string(),
+            firmware_size: 0,
+            total_chunks: 0,
+            version: "0".to_string(),
+        };
+        let debug = format!("{:?}", resp);
+        assert!(debug.contains("OtaUploadResponse"));
+        assert!(debug.contains("session_id"));
+    }
+
+    #[test]
+    fn test_ota_upload_response_zero_size() {
+        // Edge case: zero-sized firmware should still serialize
+        let resp = OtaUploadResponse {
+            session_id: 0,
+            peer_id: "".to_string(),
+            firmware_size: 0,
+            total_chunks: 0,
+            version: "".to_string(),
+        };
+        let json = serde_json::to_string(&resp).unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["firmware_size"], 0);
+        assert_eq!(parsed["total_chunks"], 0);
+    }
+
+    #[test]
+    fn test_ota_upload_response_max_session_id() {
+        let resp = OtaUploadResponse {
+            session_id: u16::MAX,
+            peer_id: "max-session".to_string(),
+            firmware_size: 1,
+            total_chunks: 1,
+            version: "0.0.1".to_string(),
+        };
+        let json: serde_json::Value = serde_json::to_value(&resp).unwrap();
+        assert_eq!(json["session_id"], u16::MAX as u64);
     }
 }

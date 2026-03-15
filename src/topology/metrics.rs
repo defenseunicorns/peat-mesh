@@ -377,35 +377,35 @@ impl InMemoryMetricsCollector {
             peer_selected_count: self
                 .event_counters
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get("PeerSelected")
                 .copied()
                 .unwrap_or(0),
             peer_lost_count: self
                 .event_counters
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get("PeerLost")
                 .copied()
                 .unwrap_or(0),
             peer_changed_count: self
                 .event_counters
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get("PeerChanged")
                 .copied()
                 .unwrap_or(0),
             role_changed_count: self
                 .event_counters
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get("RoleChanged")
                 .copied()
                 .unwrap_or(0),
             level_changed_count: self
                 .event_counters
                 .read()
-                .unwrap()
+                .unwrap_or_else(|e| e.into_inner())
                 .get("LevelChanged")
                 .copied()
                 .unwrap_or(0),
@@ -542,7 +542,7 @@ impl MetricsCollector for InMemoryMetricsCollector {
     fn increment_event_counter(&self, event_type: &str) {
         self.event_counters
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .entry(event_type.to_string())
             .and_modify(|count| *count += 1)
             .or_insert(1);

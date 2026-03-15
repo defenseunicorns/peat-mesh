@@ -68,7 +68,7 @@ impl PersistedSyncState {
             doc_key: doc_key.to_string(),
             saved_at: SystemTime::now()
                 .duration_since(UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock before UNIX epoch")
                 .as_secs(),
             sync_count,
         }
@@ -349,7 +349,7 @@ impl SyncStatePersistence {
     pub fn create_checkpoint(&self) -> Result<Checkpoint> {
         let timestamp = SystemTime::now()
             .duration_since(UNIX_EPOCH)
-            .unwrap()
+            .expect("system clock before UNIX epoch")
             .as_millis() as u64;
 
         // Count current states
