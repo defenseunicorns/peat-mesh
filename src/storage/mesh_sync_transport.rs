@@ -327,12 +327,12 @@ impl SyncProtocolHandler {
     /// Returns `Ok(())` on successful authentication.
     async fn run_formation_auth(fk: &FormationKey, connection: &Connection) -> anyhow::Result<()> {
         // Acceptor waits for the connector to open the auth stream.
-        let (mut send, mut recv) = tokio::time::timeout(
-            FORMATION_AUTH_TIMEOUT,
-            connection.accept_bi(),
-        )
-        .await
-        .map_err(|_| anyhow::anyhow!("formation auth timed out waiting for auth stream"))??;
+        let (mut send, mut recv) =
+            tokio::time::timeout(FORMATION_AUTH_TIMEOUT, connection.accept_bi())
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("formation auth timed out waiting for auth stream")
+                })??;
 
         // Send challenge
         let (nonce, _expected) = fk.create_challenge();
@@ -405,12 +405,9 @@ pub async fn respond_to_formation_auth(
     connection: &Connection,
 ) -> anyhow::Result<()> {
     // Connector opens the auth stream.
-    let (mut send, mut recv) = tokio::time::timeout(
-        FORMATION_AUTH_TIMEOUT,
-        connection.open_bi(),
-    )
-    .await
-    .map_err(|_| anyhow::anyhow!("formation auth timed out opening auth stream"))??;
+    let (mut send, mut recv) = tokio::time::timeout(FORMATION_AUTH_TIMEOUT, connection.open_bi())
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out opening auth stream"))??;
 
     // Read challenge from acceptor
     let mut len_buf = [0u8; 4];
