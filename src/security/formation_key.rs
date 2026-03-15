@@ -471,4 +471,87 @@ mod tests {
         let decoded = STANDARD.decode(&secret1).unwrap();
         assert_eq!(decoded.len(), 32);
     }
+
+    /// Simulate the full wire-level challenge-response protocol using byte buffers.
+    /// This exercises the same serialization code used by the QUIC transport handlers.
+    #[test]
+    fn test_wire_protocol_accept_with_matching_key() {
+        let secret = [0x42u8; 32];
+        let acceptor_key = FormationKey::new("test-formation", &secret);
+        let connector_key = FormationKey::new("test-formation", &secret);
+
+        // Acceptor creates challenge and serializes it
+        let (nonce, _) = acceptor_key.create_challenge();
+        let challenge = FormationChallenge {
+            formation_id: acceptor_key.formation_id().to_string(),
+            nonce,
+        };
+        let challenge_bytes = challenge.to_bytes();
+
+        // Connector deserializes challenge and produces response
+        let decoded_challenge = FormationChallenge::from_bytes(&challenge_bytes).unwrap();
+        assert_eq!(decoded_challenge.formation_id, "test-formation");
+        let response = connector_key.respond_to_challenge(&decoded_challenge.nonce);
+        let resp = FormationChallengeResponse { response };
+        let resp_bytes = resp.to_bytes();
+
+        // Acceptor deserializes response and verifies
+        let decoded_resp = FormationChallengeResponse::from_bytes(&resp_bytes).unwrap();
+        assert!(
+            acceptor_key.verify_response(&nonce, &decoded_resp.response),
+            "Matching keys should produce accepted auth"
+        );
+    }
+
+    /// Simulate the wire-level rejection when the connector has the wrong key.
+    #[test]
+    fn test_wire_protocol_reject_with_wrong_key() {
+        let acceptor_key = FormationKey::new("test-formation", &[0x42u8; 32]);
+        let connector_key = FormationKey::new("test-formation", &[0xFF; 32]); // wrong secret
+
+        // Acceptor creates challenge
+        let (nonce, _) = acceptor_key.create_challenge();
+        let challenge = FormationChallenge {
+            formation_id: acceptor_key.formation_id().to_string(),
+            nonce,
+        };
+        let challenge_bytes = challenge.to_bytes();
+
+        // Connector deserializes and responds with wrong key
+        let decoded_challenge = FormationChallenge::from_bytes(&challenge_bytes).unwrap();
+        let response = connector_key.respond_to_challenge(&decoded_challenge.nonce);
+        let resp = FormationChallengeResponse { response };
+        let resp_bytes = resp.to_bytes();
+
+        // Acceptor verifies -- should fail
+        let decoded_resp = FormationChallengeResponse::from_bytes(&resp_bytes).unwrap();
+        assert!(
+            !acceptor_key.verify_response(&nonce, &decoded_resp.response),
+            "Wrong key should produce rejected auth"
+        );
+    }
+
+    /// Verify that a formation ID mismatch is detectable by the connector
+    /// (the connector should check the formation_id in the challenge).
+    #[test]
+    fn test_wire_protocol_formation_id_mismatch() {
+        let acceptor_key = FormationKey::new("alpha", &[0x42u8; 32]);
+        let connector_key = FormationKey::new("bravo", &[0x42u8; 32]);
+
+        let (nonce, _) = acceptor_key.create_challenge();
+        let challenge = FormationChallenge {
+            formation_id: acceptor_key.formation_id().to_string(),
+            nonce,
+        };
+        let challenge_bytes = challenge.to_bytes();
+
+        let decoded_challenge = FormationChallenge::from_bytes(&challenge_bytes).unwrap();
+
+        // Connector detects formation ID mismatch
+        assert_ne!(
+            decoded_challenge.formation_id,
+            connector_key.formation_id(),
+            "Connector should detect formation ID mismatch before responding"
+        );
+    }
 }

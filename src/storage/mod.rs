@@ -107,7 +107,7 @@ pub use automerge_sync::{
     SyncEntry, SyncMessageType, DEFAULT_SYNC_BATCH_TTL,
 };
 #[cfg(feature = "automerge-backend")]
-pub use mesh_sync_transport::{MeshSyncTransport, SyncProtocolHandler};
+pub use mesh_sync_transport::{respond_to_formation_auth, MeshSyncTransport, SyncProtocolHandler};
 #[cfg(feature = "automerge-backend")]
 pub use sync_channel::{ChannelManagerStats, ChannelState, SyncChannel, SyncChannelManager};
 #[cfg(feature = "automerge-backend")]
