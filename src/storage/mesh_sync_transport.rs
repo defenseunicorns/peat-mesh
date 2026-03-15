@@ -11,6 +11,7 @@
 use std::collections::HashMap;
 use std::fmt;
 use std::sync::{Arc, RwLock};
+use std::time::Duration;
 
 use async_trait::async_trait;
 use iroh::endpoint::Connection;
@@ -23,6 +24,9 @@ use super::sync_transport::SyncTransport;
 use crate::security::formation_key::{
     FormationAuthResult, FormationChallenge, FormationChallengeResponse, FormationKey,
 };
+
+/// Timeout for formation key authentication handshake reads and writes.
+const FORMATION_AUTH_TIMEOUT: Duration = Duration::from_secs(30);
 
 // ────────────────────────────────────────────────────────────────────────────
 // MeshSyncTransport
@@ -313,12 +317,22 @@ impl iroh::protocol::ProtocolHandler for SyncProtocolHandler {
 }
 
 impl SyncProtocolHandler {
-    /// Run formation key challenge-response on a QUIC connection.
+    /// Run formation key challenge-response on an accepted QUIC connection
+    /// (acceptor/server side).
     ///
-    /// Opens a bidirectional stream, sends a challenge nonce, reads the
-    /// HMAC response, and verifies it. Returns Ok(()) on success.
+    /// Waits for the connecting peer to open a bidirectional auth stream,
+    /// sends a challenge nonce, reads the HMAC response, and verifies it.
+    /// All I/O operations are bounded by [`FORMATION_AUTH_TIMEOUT`].
+    ///
+    /// Returns `Ok(())` on successful authentication.
     async fn run_formation_auth(fk: &FormationKey, connection: &Connection) -> anyhow::Result<()> {
-        let (mut send, mut recv) = connection.open_bi().await?;
+        // Acceptor waits for the connector to open the auth stream.
+        let (mut send, mut recv) =
+            tokio::time::timeout(FORMATION_AUTH_TIMEOUT, connection.accept_bi())
+                .await
+                .map_err(|_| {
+                    anyhow::anyhow!("formation auth timed out waiting for auth stream")
+                })??;
 
         // Send challenge
         let (nonce, _expected) = fk.create_challenge();
@@ -327,34 +341,123 @@ impl SyncProtocolHandler {
             nonce,
         };
         let challenge_bytes = challenge.to_bytes();
-        send.write_all(&(challenge_bytes.len() as u32).to_le_bytes())
-            .await?;
-        send.write_all(&challenge_bytes).await?;
+        tokio::time::timeout(FORMATION_AUTH_TIMEOUT, async {
+            send.write_all(&(challenge_bytes.len() as u32).to_le_bytes())
+                .await?;
+            send.write_all(&challenge_bytes).await?;
+            Ok::<(), std::io::Error>(())
+        })
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out sending challenge"))??;
 
         // Read response
         let mut len_buf = [0u8; 4];
-        recv.read_exact(&mut len_buf).await?;
+        tokio::time::timeout(FORMATION_AUTH_TIMEOUT, recv.read_exact(&mut len_buf))
+            .await
+            .map_err(|_| anyhow::anyhow!("formation auth timed out reading response length"))??;
         let resp_len = u32::from_le_bytes(len_buf) as usize;
         if resp_len > 256 {
             anyhow::bail!("response too large: {resp_len}");
         }
         let mut resp_buf = vec![0u8; resp_len];
-        recv.read_exact(&mut resp_buf).await?;
+        tokio::time::timeout(FORMATION_AUTH_TIMEOUT, recv.read_exact(&mut resp_buf))
+            .await
+            .map_err(|_| anyhow::anyhow!("formation auth timed out reading response body"))??;
 
         let resp = FormationChallengeResponse::from_bytes(&resp_buf)
             .map_err(|e| anyhow::anyhow!("invalid response: {e}"))?;
 
-        // Verify
+        // Verify and send result
         if fk.verify_response(&nonce, &resp.response) {
-            send.write_all(&[FormationAuthResult::Accepted.to_byte()])
-                .await?;
+            tokio::time::timeout(
+                FORMATION_AUTH_TIMEOUT,
+                send.write_all(&[FormationAuthResult::Accepted.to_byte()]),
+            )
+            .await
+            .map_err(|_| anyhow::anyhow!("formation auth timed out sending accept"))??;
             send.finish()?;
             Ok(())
         } else {
-            send.write_all(&[FormationAuthResult::Rejected.to_byte()])
-                .await?;
+            tokio::time::timeout(
+                FORMATION_AUTH_TIMEOUT,
+                send.write_all(&[FormationAuthResult::Rejected.to_byte()]),
+            )
+            .await
+            .map_err(|_| anyhow::anyhow!("formation auth timed out sending reject"))??;
             send.finish()?;
             anyhow::bail!("HMAC verification failed")
+        }
+    }
+}
+
+/// Connector-side formation key authentication.
+///
+/// The connecting peer opens a bidirectional auth stream, reads the challenge
+/// from the acceptor, computes the HMAC response, and reads back the
+/// accept/reject verdict. All I/O is bounded by [`FORMATION_AUTH_TIMEOUT`].
+///
+/// Call this immediately after establishing a QUIC connection to a peer that
+/// requires formation key authentication (before opening sync streams).
+///
+/// Returns `Ok(())` if the acceptor verified our response successfully.
+pub async fn respond_to_formation_auth(
+    fk: &FormationKey,
+    connection: &Connection,
+) -> anyhow::Result<()> {
+    // Connector opens the auth stream.
+    let (mut send, mut recv) = tokio::time::timeout(FORMATION_AUTH_TIMEOUT, connection.open_bi())
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out opening auth stream"))??;
+
+    // Read challenge from acceptor
+    let mut len_buf = [0u8; 4];
+    tokio::time::timeout(FORMATION_AUTH_TIMEOUT, recv.read_exact(&mut len_buf))
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out reading challenge length"))??;
+    let challenge_len = u32::from_le_bytes(len_buf) as usize;
+    if challenge_len > 1024 {
+        anyhow::bail!("challenge too large: {challenge_len}");
+    }
+    let mut challenge_buf = vec![0u8; challenge_len];
+    tokio::time::timeout(FORMATION_AUTH_TIMEOUT, recv.read_exact(&mut challenge_buf))
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out reading challenge body"))??;
+
+    let challenge = FormationChallenge::from_bytes(&challenge_buf)
+        .map_err(|e| anyhow::anyhow!("invalid challenge: {e}"))?;
+
+    // Verify formation ID matches
+    if challenge.formation_id != fk.formation_id() {
+        anyhow::bail!(
+            "formation ID mismatch: expected {}, got {}",
+            fk.formation_id(),
+            challenge.formation_id
+        );
+    }
+
+    // Compute and send HMAC response
+    let response = fk.respond_to_challenge(&challenge.nonce);
+    let resp = FormationChallengeResponse { response };
+    let resp_bytes = resp.to_bytes();
+    tokio::time::timeout(FORMATION_AUTH_TIMEOUT, async {
+        send.write_all(&(resp_bytes.len() as u32).to_le_bytes())
+            .await?;
+        send.write_all(&resp_bytes).await?;
+        Ok::<(), std::io::Error>(())
+    })
+    .await
+    .map_err(|_| anyhow::anyhow!("formation auth timed out sending response"))??;
+
+    // Read accept/reject verdict
+    let mut verdict = [0u8; 1];
+    tokio::time::timeout(FORMATION_AUTH_TIMEOUT, recv.read_exact(&mut verdict))
+        .await
+        .map_err(|_| anyhow::anyhow!("formation auth timed out reading verdict"))??;
+
+    match FormationAuthResult::from_byte(verdict[0]) {
+        FormationAuthResult::Accepted => Ok(()),
+        FormationAuthResult::Rejected => {
+            anyhow::bail!("formation key authentication rejected by acceptor")
         }
     }
 }
