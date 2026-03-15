@@ -62,7 +62,10 @@ mod tests {
     #[test]
     fn test_alpn_contains_version() {
         let alpn_str = std::str::from_utf8(CAP_AUTOMERGE_ALPN).unwrap();
-        assert!(alpn_str.contains("/1"), "ALPN should include version suffix");
+        assert!(
+            alpn_str.contains("/1"),
+            "ALPN should include version suffix"
+        );
         assert!(
             alpn_str.starts_with("cap/"),
             "ALPN should start with protocol prefix"

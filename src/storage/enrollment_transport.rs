@@ -230,7 +230,10 @@ mod tests {
     #[test]
     fn test_enrollment_alpn_contains_version() {
         let alpn_str = std::str::from_utf8(CAP_ENROLLMENT_ALPN).unwrap();
-        assert!(alpn_str.contains("/1"), "ALPN should include version suffix");
+        assert!(
+            alpn_str.contains("/1"),
+            "ALPN should include version suffix"
+        );
         assert!(
             alpn_str.starts_with("peat/"),
             "ALPN should start with peat/ prefix"
@@ -249,8 +252,14 @@ mod tests {
     #[test]
     fn test_max_request_size_reasonable() {
         assert_eq!(MAX_REQUEST_SIZE, 65536);
-        assert!(MAX_REQUEST_SIZE >= 1024, "Request limit should allow reasonable payloads");
-        assert!(MAX_REQUEST_SIZE <= 1_048_576, "Request limit should prevent abuse");
+        assert!(
+            MAX_REQUEST_SIZE >= 1024,
+            "Request limit should allow reasonable payloads"
+        );
+        assert!(
+            MAX_REQUEST_SIZE <= 1_048_576,
+            "Request limit should prevent abuse"
+        );
     }
 
     #[test]
