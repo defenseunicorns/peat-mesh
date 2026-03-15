@@ -228,7 +228,7 @@ fn spawn_lateral_connection_retry(
                 Ok(conn) => {
                     lateral_connections
                         .write()
-                        .unwrap()
+                        .unwrap_or_else(|e| e.into_inner())
                         .insert(peer_id.clone(), conn);
                     lateral_retry_state
                         .write()
@@ -442,7 +442,7 @@ impl TopologyManager {
         let lateral_peer_ids: Vec<String> = self
             .lateral_connections
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .keys()
             .cloned()
             .collect();
@@ -480,7 +480,7 @@ impl TopologyManager {
     pub fn is_connected_to_peer(&self, node_id: &NodeId) -> bool {
         self.selected_peer_id
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .as_ref()
             .map(|id| id == node_id)
             .unwrap_or(false)
@@ -495,7 +495,7 @@ impl TopologyManager {
     pub fn get_lateral_peer_ids(&self) -> Vec<String> {
         self.lateral_connections
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .keys()
             .cloned()
             .collect()
@@ -818,7 +818,7 @@ impl TopologyManager {
                         Ok(conn) => {
                             lateral_connections
                                 .write()
-                                .unwrap()
+                                .unwrap_or_else(|e| e.into_inner())
                                 .insert(peer_id.clone(), conn);
                             lateral_retry_state
                                 .write()

@@ -230,7 +230,7 @@ impl SyncModeRegistry {
     pub fn get(&self, collection: &str) -> SyncMode {
         self.overrides
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .get(collection)
             .copied()
             .unwrap_or_else(|| SyncMode::default_for_collection(collection))
@@ -240,7 +240,7 @@ impl SyncModeRegistry {
     pub fn set(&self, collection: &str, mode: SyncMode) {
         self.overrides
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(collection.to_string(), mode);
     }
 

@@ -100,7 +100,7 @@ impl PeerConnector {
                         if let Some(ref bundle) = self.certificate_bundle {
                             let now = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
+                                .expect("system clock before UNIX epoch")
                                 .as_millis() as u64;
                             let bundle = bundle.read().unwrap_or_else(|e| e.into_inner());
                             if !bundle.validate_node_id(&peer_info.node_id, now) {
@@ -173,7 +173,7 @@ impl PeerConnector {
                         let should_remove = if let Some(ref bundle) = self.certificate_bundle {
                             let now = std::time::SystemTime::now()
                                 .duration_since(std::time::UNIX_EPOCH)
-                                .unwrap()
+                                .expect("system clock before UNIX epoch")
                                 .as_millis() as u64;
                             let bundle = bundle.read().unwrap_or_else(|e| e.into_inner());
                             !bundle.validate_node_id(&peer_info.node_id, now)

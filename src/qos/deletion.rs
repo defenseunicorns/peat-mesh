@@ -844,7 +844,7 @@ impl DeletionPolicyRegistry {
     pub fn get(&self, collection: &str) -> DeletionPolicy {
         self.overrides
             .read()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .get(collection)
             .cloned()
             .unwrap_or_else(|| DeletionPolicy::default_for_collection(collection))
@@ -854,7 +854,7 @@ impl DeletionPolicyRegistry {
     pub fn set(&self, collection: &str, policy: DeletionPolicy) {
         self.overrides
             .write()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .insert(collection.to_string(), policy);
     }
 
