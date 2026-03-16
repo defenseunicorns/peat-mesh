@@ -96,6 +96,10 @@ We use **trunk-based development** on `main` with short-lived feature branches:
 - **GPG-signed commits are required.** Configure commit signing per [GitHub's documentation](https://docs.github.com/en/authentication/managing-commit-signature-verification).
 - Write clear, descriptive commit messages
 
+## Pull Request Access
+
+Submitting pull requests requires contributor access to the repository. If you're interested in contributing, please open an issue to introduce yourself and discuss the change you'd like to make. A maintainer will grant PR access to active contributors.
+
 ## Pull Request Process
 
 1. Open a PR against `main` with a clear description of the change
