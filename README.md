@@ -1,10 +1,12 @@
 # peat-mesh
 
-Mesh networking library with CRDT sync, transport security, and topology management.
+The networking layer that lets heterogeneous systems — servers, edge nodes, mobile devices — find each other, sync state, and coordinate across any transport. Part of the [Peat](https://github.com/defenseunicorns/peat) ecosystem.
 
 ## Overview
 
-peat-mesh provides the core mesh networking layer for the Peat protocol, including:
+peat-mesh is the connective tissue between diverse systems in a Peat mesh. A Kubernetes pod running on a server, a Raspberry Pi in the field, and a phone running ATAK all use peat-mesh to discover peers, sync CRDT state, and route data — over QUIC, BLE, or both simultaneously.
+
+Core capabilities:
 
 - **Transport** - Pluggable transports (UDP bypass, BLE) with connection health monitoring and reconnection
 - **Security** - Ed25519 identity, X25519 key exchange, ChaCha20-Poly1305 encryption, formation keys
