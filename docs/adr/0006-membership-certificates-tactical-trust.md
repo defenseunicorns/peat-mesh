@@ -3,7 +3,7 @@
 > **Provenance**: Transferred from peat repo ADR-048. Renumbered for peat-mesh.
 
 **Status**: Accepted
-**Date**: 2025-01-29 (updated 2026-03-09)
+**Date**: 2025-01-29 (updated 2026-03-18)
 **Authors**: Codex, Kit Plummer
 **Related**: ADR-006 (Security Architecture), ADR-044 (E2E Encryption), ADR-039 (peat-btle Mesh Transport)
 
@@ -401,6 +401,146 @@ Protocol:
 4. Automerge sync enabled only for validated peers (Layer 2)
 
 Unknown or invalid certificates → reject peer, do not sync.
+
+## Operational Scenarios
+
+The following scenarios arise in real-world tactical and infrastructure deployments. Each must be addressed by the trust model — either by existing mechanisms, defined procedures, or acknowledged future work.
+
+### Mesh Merge / Federation
+
+Two independently-created meshes (e.g., two squads converging on an objective) need to interoperate without re-enrolling every device.
+
+**Problem**: Each mesh has its own `MeshGenesis`, authority keypair, formation secret, and certificate chain. There is no shared root of trust.
+
+**Approach**: Temporary federation via cross-signed bridge certificates.
+
+1. Authorities (or ENROLL delegates) from each mesh establish a direct link (BLE, QUIC, or physical QR exchange)
+2. Each authority issues a **federation certificate** for the other's authority public key, with:
+   - Limited permissions (e.g., RELAY only — no ENROLL, no ADMIN)
+   - Short TTL (hours, not days)
+   - A `federation_mesh_id` field distinguishing foreign certs from native ones
+3. Bridge certificates propagate via CRDT gossip within each mesh
+4. Nodes accept messages from federated peers at reduced trust (display "FEDERATED" indicator, no access to local mesh administrative functions)
+5. Federation dissolves on certificate expiry — no persistent coupling
+
+**Open questions**: Message routing between federated meshes (relay policy). Whether federated nodes can participate in CRDT document sync or only relay opaque messages. Priority relative to native mesh traffic.
+
+### Split-Brain / Partition Recovery
+
+A mesh partitions (e.g., terrain blocks radio, network outage). Both halves continue operating. ENROLL delegates in each partition may issue new certificates independently.
+
+**Problem**: When partitions rejoin, CRDT merge handles data convergence, but both halves may have enrolled new nodes the other half has never seen. In adversarial scenarios, a captured partition could have issued certs to hostile nodes.
+
+**Approach**: Convergence via CRDT merge with authority reconciliation.
+
+1. **Certificate merge is automatic**: CRDT sync propagates all certificates from both partitions. Each node validates incoming certs against the chain of trust (root → delegator → new node). Valid chains are accepted regardless of which partition issued them.
+2. **Conflicting revocations**: If partition A revoked a node that partition B kept active, the revocation wins (revocations are tombstones in the CRDT — once written, they persist). CRDT merge semantics: `revocations` map entries are never deleted, only added.
+3. **Suspicious enrollment detection**: After rejoin, nodes with ADMIN permission should review newly-merged certificates for anomalies (unexpected delegator, unusual permissions, certs issued during known compromise window). This is an operational procedure, not an automated mechanism.
+4. **Epoch counter**: Each enrollment increments a mesh-wide epoch counter in the CRDT. After partition rejoin, a gap or fork in the epoch sequence signals that independent enrollment occurred — operators can audit.
+
+**Not addressed**: Automated conflict resolution for duplicate `node_id` assignments across partitions (unlikely with UUID-based IDs, possible with hostname-based IDs).
+
+### Authority Loss Without Delegation
+
+The authority device is destroyed, lost, or captured before delegating ENROLL permission to any other node.
+
+**Problem**: The mesh is frozen for enrollment. Existing members continue operating (their certs are still valid), but no new devices can join and expired certs cannot be renewed.
+
+**Approach**: Genesis backup and M-of-N recovery.
+
+1. **Genesis export**: At genesis time, the operator exports an encrypted backup of `MeshGenesis` (including `authority_keypair` private key). Storage options:
+   - Split into M-of-N Shamir shares distributed to trusted personnel
+   - Encrypted to a hardware security key (YubiKey, CAC) held by a commander
+   - Stored in a secure offline vault (USB, air-gapped system)
+2. **Recovery procedure**: Any device can import the genesis backup, reconstruct the authority keypair, and resume enrollment. The recovered authority self-signs a new root cert with the same public key — existing certificate chains remain valid.
+3. **Operational discipline**: Standing guidance should be to delegate ENROLL to at least two nodes immediately after genesis. Genesis backup is a last resort, not a primary mechanism.
+
+**Not addressed**: Automated authority election or promotion. Intentionally omitted — authority promotion without out-of-band verification is an attack vector. Recovery must involve human decision-making.
+
+### Compromised Formation Secret
+
+The pre-shared `formation_secret` leaks to an adversary (captured device, exfiltrated config, insider threat).
+
+**Problem**: The adversary can establish Layer 0 (QUIC transport) connections to any mesh node. They cannot access Layer 2 data without a valid certificate, but they can:
+- Enumerate mesh members by connecting and observing enrollment rejections
+- Attempt resource exhaustion via connection floods
+- Perform traffic analysis (who connects to whom, when)
+
+**Approach**: Formation secret rotation.
+
+1. **Detection**: Anomalous Layer 0 connections from unknown EndpointIds that fail Layer 1/2 validation. Nodes should log and rate-limit unauthenticated connection attempts.
+2. **Rotation trigger**: Authority (or ADMIN node) writes a `formation_secret_rotation` entry to the CRDT certificate document:
+   ```
+   { new_formation_secret_encrypted: <encrypted to each member's public key>,
+     rotation_epoch: <monotonic counter>,
+     effective_at_ms: <future timestamp, e.g., now + 5 minutes> }
+   ```
+3. **Rollover**: Each node decrypts its copy of the new formation secret, schedules a switchover at `effective_at_ms`. During a brief transition window, nodes accept connections on both old and new secrets. After the window closes, old secret is discarded.
+4. **Stragglers**: Nodes that were offline during rotation will fail to connect on the old secret. They must re-enroll via out-of-band bootstrap (QR, NFC, pre-shared config with the new secret).
+
+**Not addressed**: Rotation of derived keys (encryption_secret, beacon_key_base) — these should rotate in lockstep with formation_secret. Exact CRDT schema for the rotation document.
+
+### Device Transfer / Reprovisioning
+
+A device changes roles (relay → user node), is reassigned to a different operator, or needs permission changes without full re-enrollment.
+
+**Problem**: The current model requires re-enrollment to change permissions or callsign. Re-enrollment means a new certificate, but the device's keypair and mesh membership are unchanged.
+
+**Approach**: Certificate reissuance by authority.
+
+1. Authority (or ENROLL delegate) issues a **replacement certificate** for the same `subject_public_key` with updated fields (permissions, callsign, tier, expiration).
+2. The new certificate is written to the CRDT certificate document, overwriting the previous entry (keyed by `subject_pubkey_hex`).
+3. The old certificate is implicitly superseded — nodes use the highest-epoch cert for a given public key.
+4. **No re-enrollment needed**: The device already has a valid keypair and formation secret. The authority simply signs a new cert and publishes it via CRDT.
+
+**Constraint**: Only the original issuer (or a higher-tier authority) can reissue. A delegated ENROLL node cannot reissue certificates originally signed by root — this prevents privilege escalation.
+
+### Contested / Denied Environments
+
+An adversary captures a device with valid credentials (formation_secret + unexpired certificate). The adversary may also be jamming communications, preventing revocation propagation.
+
+**Problem**: Revocation requires CRDT gossip to reach all nodes. If the adversary is jamming, legitimate nodes cannot receive the revocation, and the compromised device continues to be trusted.
+
+**Approach**: Defense in depth — no single mechanism is sufficient.
+
+1. **Short certificate TTL**: In high-threat environments, reduce `auth_interval_hours` to 4-8 hours. Captured certs expire quickly even without revocation. Grace period should be minimal (1 hour or less).
+2. **Local revocation lists**: Nodes that directly observe suspicious behavior (e.g., duplicate source_node_id from different EndpointIds, messages failing signature verification, unexpected geographic location via beacon) can locally blacklist a peer without waiting for CRDT propagation.
+3. **Revocation propagation on reconnect**: When jamming subsides and nodes reconnect, CRDT merge immediately propagates any revocations written during the blackout. Revocations are tombstones — they always win on merge.
+4. **Formation secret rotation**: After the compromised device is identified, rotate the formation secret (see above). Even if the adversary has the old cert, they lose Layer 0 transport access.
+5. **Operational procedure**: Report compromise over voice/out-of-band. All nodes manually blacklist the compromised node_id until CRDT propagation confirms revocation.
+
+**Accepted risk**: During the window between compromise and revocation propagation (or cert expiry), the adversary can impersonate the captured device. Short TTLs minimize this window. Message replay is not addressed here (see ADR-044 for sequence numbers and anti-replay).
+
+### Multi-Mesh Devices
+
+A gateway node participates in two or more meshes simultaneously — e.g., bridging a tactical BLE mesh to a regional QUIC hub, or a relay node spanning two squad meshes.
+
+**Problem**: The device holds credentials for multiple genesis roots. Identity, certificate validation, and message routing must be isolated per mesh to prevent cross-contamination.
+
+**Approach**: Per-mesh credential isolation.
+
+1. Each mesh context is a separate `MeshCredentials` instance with its own formation secret, authority chain, and certificate bundle. No shared state between mesh contexts.
+2. The device holds a separate `DeviceKeypair` per mesh (or derives mesh-specific keypairs from a root key via HKDF with mesh_id as context). This ensures EndpointIds are unique per mesh.
+3. **Transport isolation**: Separate QUIC endpoints (different ports) per mesh. No cross-mesh connection reuse.
+4. **Message relay policy**: Messages are never automatically forwarded between meshes. A gateway application explicitly decides what to bridge, applying policy (classification, need-to-know, redaction) at the application layer.
+5. **Certificate isolation**: A certificate valid in mesh A has no meaning in mesh B. The gateway authenticates independently in each mesh.
+
+**Open questions**: Unified device management (single UI showing both meshes). Resource contention (CPU, radio time) between mesh contexts. Whether federation certificates (see Mesh Merge above) could replace dedicated gateway nodes for some use cases.
+
+### Clock Skew in GPS-Denied Environments
+
+Certificate expiration relies on `issued_at_ms` and `expires_at_ms`. Nodes in GPS-denied or underground environments may have significant clock drift.
+
+**Problem**: A node with a slow clock may accept expired certificates. A node with a fast clock may reject valid certificates prematurely. There is no trusted time source.
+
+**Approach**: Bounded tolerance with mesh-relative time.
+
+1. **Skew tolerance**: Certificate validation applies a configurable tolerance window (default: 30 minutes). A certificate is considered valid if `now` is within `[issued_at_ms - tolerance, expires_at_ms + tolerance]`.
+2. **Mesh time gossip**: Nodes include their local timestamp in heartbeat messages (graph cache entries already carry `heartbeat_ms`). Each node computes the median timestamp across recent heartbeats from peers and uses it as a mesh-relative reference. Outliers (>1 hour from median) are flagged.
+3. **No hard enforcement for short skew**: If a node's clock is within tolerance, it operates normally. If outside tolerance, it logs a warning and continues with degraded trust (peers see "CLOCK SKEW" flag alongside the node's graph entry).
+4. **Grace period extension**: The existing grace period mechanism (4 hours default) already absorbs moderate clock drift. In GPS-denied environments, operators should increase `grace_period_hours` proportionally.
+
+**Not addressed**: Byzantine clock attacks (a malicious node deliberately advertising false timestamps to manipulate mesh-relative time). Mitigated by using median rather than mean, and by weighting timestamps from higher-tier nodes.
 
 ## Consequences
 
