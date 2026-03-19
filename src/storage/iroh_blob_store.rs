@@ -512,13 +512,18 @@ impl BlobStore for IrohBlobStore {
 // ============================================================================
 
 use crate::config::IrohConfig;
-use iroh::discovery::static_provider::StaticProvider;
+use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_blobs::BlobsProtocol;
 use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
+
+/// No-op endpoint hooks used as the default type parameter for [`build_endpoint`].
+#[derive(Debug)]
+struct NoopEndpointHooks;
+impl iroh::endpoint::EndpointHooks for NoopEndpointHooks {}
 
 // ============================================================================
 // BlobPeerIndex - O(1) blob-to-peer resolution
@@ -637,8 +642,8 @@ pub struct NetworkedIrohBlobStore {
     known_peers: TokioRwLock<Vec<EndpointId>>,
     /// Reverse index: blob hash → peers that have it, peer → blob hashes
     blob_peer_index: TokioRwLock<BlobPeerIndex>,
-    /// Static discovery provider for adding peer addresses at runtime
-    static_provider: StaticProvider,
+    /// In-memory address lookup for adding peer addresses at runtime
+    memory_lookup: MemoryLookup,
     /// Timeout for graceful shutdown
     shutdown_timeout: Duration,
     /// Timeout for blob download operations from remote peers
@@ -666,16 +671,38 @@ impl NetworkedIrohBlobStore {
         Self::from_config(blob_dir, &config).await
     }
 
-    /// Build an Iroh [`Endpoint`] and [`StaticProvider`] from an [`IrohConfig`].
+    /// Build an Iroh [`Endpoint`] and [`MemoryLookup`] from an [`IrohConfig`].
     ///
     /// Use this when you need to access the endpoint before constructing the
     /// blob store (e.g. to share it with [`MeshSyncTransport`]).
     ///
     /// [`MeshSyncTransport`]: super::mesh_sync_transport::MeshSyncTransport
-    pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, StaticProvider)> {
-        let static_provider = StaticProvider::new();
+    pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, MemoryLookup)> {
+        Self::build_endpoint_with_hooks(config, None::<NoopEndpointHooks>).await
+    }
 
-        let mut builder = Endpoint::builder().discovery(static_provider.clone());
+    /// Build an Iroh [`Endpoint`] and [`MemoryLookup`] with optional
+    /// [`EndpointHooks`] for intercepting connection lifecycle events.
+    ///
+    /// Hooks allow callers to:
+    /// - **`before_connect`**: inspect/reject outgoing connections before packets are sent
+    /// - **`after_handshake`**: inspect/reject connections after TLS handshake completes
+    ///
+    /// [`EndpointHooks`]: iroh::endpoint::EndpointHooks
+    /// [`MeshSyncTransport`]: super::mesh_sync_transport::MeshSyncTransport
+    pub async fn build_endpoint_with_hooks(
+        config: &IrohConfig,
+        hooks: Option<impl iroh::endpoint::EndpointHooks + 'static>,
+    ) -> Result<(Endpoint, MemoryLookup)> {
+        let memory_lookup = MemoryLookup::new();
+
+        let mut builder =
+            Endpoint::builder(iroh::endpoint::presets::N0).address_lookup(memory_lookup.clone());
+
+        // Install endpoint hooks if provided
+        if let Some(hooks) = hooks {
+            builder = builder.hooks(hooks);
+        }
 
         // Apply deterministic secret key
         if let Some(key_bytes) = config.secret_key {
@@ -684,13 +711,9 @@ impl NetworkedIrohBlobStore {
 
         // Apply bind address
         if let Some(bind_addr) = config.bind_addr {
-            let bind_addr_v4 = match bind_addr {
-                std::net::SocketAddr::V4(addr) => addr,
-                std::net::SocketAddr::V6(_) => {
-                    return Err(anyhow::anyhow!("Only IPv4 bind addresses are supported"));
-                }
-            };
-            builder = builder.bind_addr_v4(bind_addr_v4);
+            builder = builder
+                .bind_addr(bind_addr)
+                .map_err(|e| anyhow::anyhow!("Invalid bind address: {}", e))?;
         }
 
         // Apply relay configuration
@@ -714,7 +737,7 @@ impl NetworkedIrohBlobStore {
             })?
             .map_err(|e| anyhow::anyhow!("Failed to create iroh endpoint: {}", e))?;
 
-        Ok((endpoint, static_provider))
+        Ok((endpoint, memory_lookup))
     }
 
     /// Create a networked blob store from an [`IrohConfig`].
@@ -722,11 +745,11 @@ impl NetworkedIrohBlobStore {
     /// Applies bind address and relay URL settings from the config when
     /// constructing the iroh endpoint.
     pub async fn from_config(blob_dir: PathBuf, config: &IrohConfig) -> Result<Arc<Self>> {
-        let (endpoint, static_provider) = Self::build_endpoint(config).await?;
+        let (endpoint, memory_lookup) = Self::build_endpoint(config).await?;
         Self::from_endpoint_with_protocols_with_timeouts(
             blob_dir,
             endpoint,
-            static_provider,
+            memory_lookup,
             vec![],
             config.shutdown_timeout,
             config.download_timeout,
@@ -754,9 +777,9 @@ impl NetworkedIrohBlobStore {
         &self.local_store
     }
 
-    /// Get a reference to the static discovery provider
-    pub fn static_provider(&self) -> &StaticProvider {
-        &self.static_provider
+    /// Get a reference to the in-memory address lookup provider
+    pub fn memory_lookup(&self) -> &MemoryLookup {
+        &self.memory_lookup
     }
 
     /// Create a networked blob store from a pre-built [`Endpoint`], optionally
@@ -774,14 +797,14 @@ impl NetworkedIrohBlobStore {
     pub async fn from_endpoint_with_protocols(
         blob_dir: PathBuf,
         endpoint: Endpoint,
-        static_provider: StaticProvider,
+        memory_lookup: MemoryLookup,
         extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
     ) -> Result<Arc<Self>> {
         let defaults = IrohConfig::default();
         Self::from_endpoint_with_protocols_with_timeouts(
             blob_dir,
             endpoint,
-            static_provider,
+            memory_lookup,
             extra_protocols,
             defaults.shutdown_timeout,
             defaults.download_timeout,
@@ -794,7 +817,7 @@ impl NetworkedIrohBlobStore {
     pub async fn from_endpoint_with_protocols_with_timeouts(
         blob_dir: PathBuf,
         endpoint: Endpoint,
-        static_provider: StaticProvider,
+        memory_lookup: MemoryLookup,
         extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
         shutdown_timeout: Duration,
         download_timeout: Duration,
@@ -817,7 +840,7 @@ impl NetworkedIrohBlobStore {
             blobs_protocol,
             known_peers: TokioRwLock::new(Vec::new()),
             blob_peer_index: TokioRwLock::new(BlobPeerIndex::new()),
-            static_provider,
+            memory_lookup,
             shutdown_timeout,
             download_timeout,
         }))
@@ -1469,7 +1492,7 @@ mod tests {
             store_a.endpoint_id(),
             [iroh::TransportAddr::Ip(addr_a)],
         );
-        store_b.static_provider().add_endpoint_info(endpoint_addr_a);
+        store_b.memory_lookup().add_endpoint_info(endpoint_addr_a);
         store_b.add_peer(store_a.endpoint_id()).await;
 
         // Index should be empty before fetch
@@ -1491,7 +1514,7 @@ mod tests {
     }
 
     /// Two `NetworkedIrohBlobStore` instances discover each other via
-    /// `StaticProvider`, one creates a blob, the other fetches it over QUIC.
+    /// `MemoryLookup`, one creates a blob, the other fetches it over QUIC.
     #[tokio::test]
     async fn test_p2p_blob_transfer() {
         let dir_a = TempDir::new().unwrap();
@@ -1529,7 +1552,7 @@ mod tests {
             store_a.endpoint_id(),
             [iroh::TransportAddr::Ip(addr_a)],
         );
-        store_b.static_provider().add_endpoint_info(endpoint_addr_a);
+        store_b.memory_lookup().add_endpoint_info(endpoint_addr_a);
         store_b.add_peer(store_a.endpoint_id()).await;
 
         // Create a blob on store_a
@@ -1549,5 +1572,109 @@ mod tests {
         // Clean up
         store_a.shutdown().await.unwrap();
         store_b.shutdown().await.unwrap();
+    }
+
+    // ---- EndpointHooks tests ----
+
+    /// `build_endpoint_with_hooks(None)` behaves identically to `build_endpoint`.
+    #[tokio::test]
+    async fn test_build_endpoint_without_hooks() {
+        let config = IrohConfig {
+            secret_key: Some([42u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint, _lookup) = NetworkedIrohBlobStore::build_endpoint(&config)
+            .await
+            .unwrap();
+        // Endpoint should have a valid ID derived from the secret key
+        let id_str = endpoint.id().to_string();
+        assert!(!id_str.is_empty());
+        endpoint.close().await;
+    }
+
+    /// `build_endpoint_with_hooks(Some(hooks))` creates a working endpoint
+    /// and the hooks fire on incoming connections.
+    #[tokio::test]
+    async fn test_build_endpoint_with_custom_hooks() {
+        use iroh::protocol::Router;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        #[derive(Debug)]
+        struct TrackingHooks {
+            after_handshake_called: Arc<AtomicBool>,
+        }
+        impl iroh::endpoint::EndpointHooks for TrackingHooks {
+            fn after_handshake<'a>(
+                &'a self,
+                _conn: &'a iroh::endpoint::ConnectionInfo,
+            ) -> impl std::future::Future<Output = iroh::endpoint::AfterHandshakeOutcome> + Send + 'a
+            {
+                self.after_handshake_called.store(true, Ordering::SeqCst);
+                async { iroh::endpoint::AfterHandshakeOutcome::Accept }
+            }
+        }
+
+        let called = Arc::new(AtomicBool::new(false));
+        let hooks = TrackingHooks {
+            after_handshake_called: called.clone(),
+        };
+
+        let config_a = IrohConfig {
+            secret_key: Some([43u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint_a, _lookup_a) =
+            NetworkedIrohBlobStore::build_endpoint_with_hooks(&config_a, Some(hooks))
+                .await
+                .unwrap();
+
+        // Minimal handler so Router accepts on this ALPN
+        #[derive(Debug)]
+        struct Noop;
+        impl iroh::protocol::ProtocolHandler for Noop {
+            async fn accept(
+                &self,
+                _conn: iroh::endpoint::Connection,
+            ) -> Result<(), iroh::protocol::AcceptError> {
+                Ok(())
+            }
+        }
+
+        let _router_a = Router::builder(endpoint_a.clone())
+            .accept(b"test/hook/1", Noop)
+            .spawn();
+
+        // Build a second endpoint and connect to the first to trigger the hook
+        let config_b = IrohConfig {
+            secret_key: Some([44u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint_b, lookup_b) = NetworkedIrohBlobStore::build_endpoint(&config_b)
+            .await
+            .unwrap();
+
+        // Tell B about A's address
+        let addr_a = endpoint_a.bound_sockets().into_iter().next().unwrap();
+        lookup_b.add_endpoint_info(iroh::EndpointAddr::from_parts(
+            endpoint_a.id(),
+            [iroh::TransportAddr::Ip(addr_a)],
+        ));
+
+        // B connects to A — this triggers A's after_handshake hook
+        let conn = endpoint_b
+            .connect(endpoint_a.id(), b"test/hook/1")
+            .await
+            .unwrap();
+
+        // Give the hook a moment to fire
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            called.load(Ordering::SeqCst),
+            "after_handshake hook should have been called"
+        );
+
+        conn.close(0u32.into(), b"done");
+        endpoint_a.close().await;
+        endpoint_b.close().await;
     }
 }

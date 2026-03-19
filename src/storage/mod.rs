@@ -108,6 +108,14 @@ pub use automerge_sync::{
 };
 #[cfg(feature = "automerge-backend")]
 pub use mesh_sync_transport::{respond_to_formation_auth, MeshSyncTransport, SyncProtocolHandler};
+
+// Re-export iroh multipath and endpoint types for downstream use
+#[cfg(feature = "automerge-backend")]
+pub mod iroh_types {
+    //! Re-exported iroh types for multipath connection info and endpoint hooks.
+    pub use iroh::endpoint::{Connection, EndpointHooks, PathId, PathInfo, PathStats, PathWatcher};
+    pub use iroh::Watcher;
+}
 #[cfg(feature = "automerge-backend")]
 pub use sync_channel::{ChannelManagerStats, ChannelState, SyncChannel, SyncChannelManager};
 #[cfg(feature = "automerge-backend")]
