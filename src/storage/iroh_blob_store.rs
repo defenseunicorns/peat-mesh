@@ -675,8 +675,8 @@ impl NetworkedIrohBlobStore {
     pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, MemoryLookup)> {
         let memory_lookup = MemoryLookup::new();
 
-        let mut builder = Endpoint::builder(iroh::endpoint::presets::N0)
-            .address_lookup(memory_lookup.clone());
+        let mut builder =
+            Endpoint::builder(iroh::endpoint::presets::N0).address_lookup(memory_lookup.clone());
 
         // Apply deterministic secret key
         if let Some(key_bytes) = config.secret_key {
