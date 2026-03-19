@@ -637,7 +637,7 @@ pub struct NetworkedIrohBlobStore {
     known_peers: TokioRwLock<Vec<EndpointId>>,
     /// Reverse index: blob hash → peers that have it, peer → blob hashes
     blob_peer_index: TokioRwLock<BlobPeerIndex>,
-    /// Static discovery provider for adding peer addresses at runtime
+    /// In-memory address lookup for adding peer addresses at runtime
     memory_lookup: MemoryLookup,
     /// Timeout for graceful shutdown
     shutdown_timeout: Duration,
@@ -751,7 +751,7 @@ impl NetworkedIrohBlobStore {
         &self.local_store
     }
 
-    /// Get a reference to the static discovery provider
+    /// Get a reference to the in-memory address lookup provider
     pub fn memory_lookup(&self) -> &MemoryLookup {
         &self.memory_lookup
     }
