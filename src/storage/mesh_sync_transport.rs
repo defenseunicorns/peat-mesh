@@ -14,9 +14,9 @@ use std::sync::{Arc, RwLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use iroh::endpoint::Connection;
+use iroh::endpoint::{Connection, PathInfo};
 use iroh::protocol::AcceptError;
-use iroh::{Endpoint, EndpointId};
+use iroh::{Endpoint, EndpointId, Watcher};
 use tracing::{debug, info, warn};
 
 use super::automerge_sync::AutomergeSyncCoordinator;
@@ -91,6 +91,46 @@ impl MeshSyncTransport {
         self.insert_connection(peer_id, connection.clone());
 
         let transport = Arc::clone(self);
+
+        // Log initial path info for the connection
+        let paths: Vec<_> = connection.paths().into_iter().collect();
+        let path_summary: Vec<&str> = paths
+            .iter()
+            .map(|p| if p.is_relay() { "relay" } else { "direct" })
+            .collect();
+        info!(
+            peer = %peer_id.fmt_short(),
+            paths = ?path_summary,
+            "Sync connection established with {} path(s)",
+            paths.len()
+        );
+
+        // Spawn path watcher to log multipath transitions
+        let path_watcher = connection.paths();
+        let path_peer_id = peer_id;
+        tokio::spawn(async move {
+            let mut watcher = path_watcher;
+            loop {
+                match watcher.updated().await {
+                    Ok(path_list) => {
+                        let paths: Vec<_> = path_list.into_iter().collect();
+                        let selected = paths.iter().find(|p| p.is_selected());
+                        let path_type =
+                            selected.map(|p| if p.is_relay() { "relay" } else { "direct" });
+                        let rtt = selected.and_then(|p| p.rtt());
+                        info!(
+                            peer = %path_peer_id.fmt_short(),
+                            active_path = ?path_type,
+                            rtt = ?rtt,
+                            total_paths = paths.len(),
+                            "Connection paths changed"
+                        );
+                    }
+                    Err(_) => break, // Connection dropped
+                }
+            }
+        });
+
         tokio::spawn(async move {
             loop {
                 match connection.accept_bi().await {
@@ -135,6 +175,35 @@ impl MeshSyncTransport {
     /// Get a reference to the underlying Iroh endpoint.
     pub fn endpoint(&self) -> &Endpoint {
         &self.endpoint
+    }
+
+    /// Get multipath info for a peer connection.
+    ///
+    /// Returns the current set of network paths (relay, direct IPv4/IPv6)
+    /// with per-path metadata. Returns `None` if the peer is not connected.
+    ///
+    /// Each [`PathInfo`] includes:
+    /// - `is_selected()` — whether this is the active transmission path
+    /// - `is_relay()` / `is_ip()` — path type
+    /// - `rtt()` — round-trip time estimate
+    /// - `stats()` — detailed per-path statistics (bytes, loss, MTU, congestion)
+    pub fn peer_paths(&self, peer_id: &EndpointId) -> Option<Vec<PathInfo>> {
+        let conns = self.connections.read().unwrap_or_else(|e| e.into_inner());
+        let conn = conns.get(peer_id)?;
+        Some(conn.paths().into_iter().collect())
+    }
+
+    /// Get the current round-trip time estimate for a peer.
+    ///
+    /// Returns the RTT of the selected (active) path, or `None` if the
+    /// peer is not connected or no path is selected.
+    pub fn peer_rtt(&self, peer_id: &EndpointId) -> Option<Duration> {
+        let conns = self.connections.read().unwrap_or_else(|e| e.into_inner());
+        let conn = conns.get(peer_id)?;
+        conn.paths()
+            .into_iter()
+            .find(|p| p.is_selected())
+            .and_then(|p| p.rtt())
     }
 }
 

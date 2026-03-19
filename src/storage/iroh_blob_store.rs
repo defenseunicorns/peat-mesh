@@ -520,6 +520,11 @@ use std::collections::HashSet;
 use std::sync::Arc;
 use tokio::sync::RwLock as TokioRwLock;
 
+/// No-op endpoint hooks used as the default type parameter for [`build_endpoint`].
+#[derive(Debug)]
+struct NoopEndpointHooks;
+impl iroh::endpoint::EndpointHooks for NoopEndpointHooks {}
+
 // ============================================================================
 // BlobPeerIndex - O(1) blob-to-peer resolution
 // ============================================================================
@@ -673,10 +678,31 @@ impl NetworkedIrohBlobStore {
     ///
     /// [`MeshSyncTransport`]: super::mesh_sync_transport::MeshSyncTransport
     pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, MemoryLookup)> {
+        Self::build_endpoint_with_hooks(config, None::<NoopEndpointHooks>).await
+    }
+
+    /// Build an Iroh [`Endpoint`] and [`MemoryLookup`] with optional
+    /// [`EndpointHooks`] for intercepting connection lifecycle events.
+    ///
+    /// Hooks allow callers to:
+    /// - **`before_connect`**: inspect/reject outgoing connections before packets are sent
+    /// - **`after_handshake`**: inspect/reject connections after TLS handshake completes
+    ///
+    /// [`EndpointHooks`]: iroh::endpoint::EndpointHooks
+    /// [`MeshSyncTransport`]: super::mesh_sync_transport::MeshSyncTransport
+    pub async fn build_endpoint_with_hooks(
+        config: &IrohConfig,
+        hooks: Option<impl iroh::endpoint::EndpointHooks + 'static>,
+    ) -> Result<(Endpoint, MemoryLookup)> {
         let memory_lookup = MemoryLookup::new();
 
         let mut builder =
             Endpoint::builder(iroh::endpoint::presets::N0).address_lookup(memory_lookup.clone());
+
+        // Install endpoint hooks if provided
+        if let Some(hooks) = hooks {
+            builder = builder.hooks(hooks);
+        }
 
         // Apply deterministic secret key
         if let Some(key_bytes) = config.secret_key {
