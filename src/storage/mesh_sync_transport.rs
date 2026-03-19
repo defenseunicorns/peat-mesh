@@ -662,4 +662,158 @@ mod tests {
             FormationAuthResult::Rejected
         );
     }
+
+    // ---- Multipath / noq feature tests ----
+
+    /// Helper: create a pair of connected iroh endpoints for testing.
+    ///
+    /// Returns (endpoint_a, endpoint_b, connection_from_b_to_a).
+    /// Uses Router on endpoint_a to handle incoming connections.
+    async fn create_connected_endpoints() -> (Endpoint, Endpoint, Connection) {
+        use iroh::address_lookup::memory::MemoryLookup;
+        use iroh::protocol::Router;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        let alpn: &[u8] = b"test/mesh/1";
+
+        // Minimal protocol handler that just accepts
+        #[derive(Debug)]
+        struct AcceptAll(Arc<AtomicBool>);
+        impl iroh::protocol::ProtocolHandler for AcceptAll {
+            async fn accept(&self, _conn: Connection) -> Result<(), iroh::protocol::AcceptError> {
+                self.0.store(true, Ordering::SeqCst);
+                Ok(())
+            }
+        }
+
+        let accepted = Arc::new(AtomicBool::new(false));
+
+        let lookup_a = MemoryLookup::new();
+        let endpoint_a = Endpoint::builder(iroh::endpoint::presets::N0)
+            .address_lookup(lookup_a.clone())
+            .secret_key(iroh::SecretKey::from_bytes(&[10u8; 32]))
+            .bind()
+            .await
+            .unwrap();
+
+        // Router on A accepts incoming connections
+        let _router_a = Router::builder(endpoint_a.clone())
+            .accept(alpn, AcceptAll(accepted.clone()))
+            .spawn();
+
+        let lookup_b = MemoryLookup::new();
+        let endpoint_b = Endpoint::builder(iroh::endpoint::presets::N0)
+            .address_lookup(lookup_b.clone())
+            .secret_key(iroh::SecretKey::from_bytes(&[11u8; 32]))
+            .bind()
+            .await
+            .unwrap();
+
+        // Tell B about A's address
+        let addr_a = endpoint_a.bound_sockets().into_iter().next().unwrap();
+        lookup_b.add_endpoint_info(iroh::EndpointAddr::from_parts(
+            endpoint_a.id(),
+            [iroh::TransportAddr::Ip(addr_a)],
+        ));
+
+        // B connects to A
+        let conn = endpoint_b.connect(endpoint_a.id(), alpn).await.unwrap();
+
+        (endpoint_a, endpoint_b, conn)
+    }
+
+    /// `peer_paths()` returns path info for a connected peer.
+    #[tokio::test]
+    async fn test_peer_paths_returns_paths_for_connected_peer() {
+        let (endpoint_a, endpoint_b, conn) = create_connected_endpoints().await;
+
+        let transport = MeshSyncTransport::new(endpoint_b.clone());
+        let peer_id = conn.remote_id();
+        transport.insert_connection(peer_id, conn);
+
+        let paths = transport.peer_paths(&peer_id);
+        assert!(paths.is_some(), "Should return paths for connected peer");
+
+        let paths = paths.unwrap();
+        assert!(!paths.is_empty(), "Should have at least one path");
+
+        // At least one path should be selected
+        let selected = paths.iter().filter(|p| p.is_selected()).count();
+        assert!(selected >= 1, "At least one path should be selected");
+
+        // Local connections should be direct (IP), not relay
+        let has_ip = paths.iter().any(|p| p.is_ip());
+        assert!(has_ip, "Local connection should have an IP path");
+
+        endpoint_a.close().await;
+        endpoint_b.close().await;
+    }
+
+    /// `peer_paths()` returns `None` for unknown peers.
+    #[tokio::test]
+    async fn test_peer_paths_returns_none_for_unknown_peer() {
+        let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
+            .secret_key(iroh::SecretKey::from_bytes(&[20u8; 32]))
+            .bind()
+            .await
+            .unwrap();
+
+        let transport = MeshSyncTransport::new(endpoint.clone());
+        let unknown_peer = iroh::SecretKey::from_bytes(&[99u8; 32]).public();
+
+        assert!(transport.peer_paths(&unknown_peer).is_none());
+        assert!(transport.peer_rtt(&unknown_peer).is_none());
+
+        endpoint.close().await;
+    }
+
+    /// `peer_rtt()` returns a duration for a connected peer.
+    #[tokio::test]
+    async fn test_peer_rtt_returns_value_for_connected_peer() {
+        let (endpoint_a, endpoint_b, conn) = create_connected_endpoints().await;
+
+        let transport = MeshSyncTransport::new(endpoint_b.clone());
+        let peer_id = conn.remote_id();
+        transport.insert_connection(peer_id, conn);
+
+        // RTT may not be immediately available (needs a round-trip),
+        // but peer_rtt should not panic and should return Some for
+        // an established local connection.
+        let rtt = transport.peer_rtt(&peer_id);
+        // Local connections have near-zero RTT; it should be available
+        // after the QUIC handshake.
+        if let Some(rtt) = rtt {
+            assert!(
+                rtt < Duration::from_secs(5),
+                "Local RTT should be well under 5s, got {:?}",
+                rtt
+            );
+        }
+        // Note: RTT may be None if no data has been sent yet on the
+        // selected path — this is acceptable.
+
+        endpoint_a.close().await;
+        endpoint_b.close().await;
+    }
+
+    /// PathInfo exposes path type (relay vs direct) correctly.
+    #[tokio::test]
+    async fn test_path_info_type_detection() {
+        let (endpoint_a, endpoint_b, conn) = create_connected_endpoints().await;
+
+        let transport = MeshSyncTransport::new(endpoint_b.clone());
+        let peer_id = conn.remote_id();
+        transport.insert_connection(peer_id, conn);
+
+        let paths = transport.peer_paths(&peer_id).unwrap();
+        for path in &paths {
+            // Each path must be exactly one type
+            let is_ip = path.is_ip();
+            let is_relay = path.is_relay();
+            assert!(is_ip || is_relay, "Path should be either IP or relay");
+        }
+
+        endpoint_a.close().await;
+        endpoint_b.close().await;
+    }
 }

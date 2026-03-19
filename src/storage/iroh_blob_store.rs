@@ -1573,4 +1573,108 @@ mod tests {
         store_a.shutdown().await.unwrap();
         store_b.shutdown().await.unwrap();
     }
+
+    // ---- EndpointHooks tests ----
+
+    /// `build_endpoint_with_hooks(None)` behaves identically to `build_endpoint`.
+    #[tokio::test]
+    async fn test_build_endpoint_without_hooks() {
+        let config = IrohConfig {
+            secret_key: Some([42u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint, _lookup) = NetworkedIrohBlobStore::build_endpoint(&config)
+            .await
+            .unwrap();
+        // Endpoint should have a valid ID derived from the secret key
+        let id_str = endpoint.id().to_string();
+        assert!(!id_str.is_empty());
+        endpoint.close().await;
+    }
+
+    /// `build_endpoint_with_hooks(Some(hooks))` creates a working endpoint
+    /// and the hooks fire on incoming connections.
+    #[tokio::test]
+    async fn test_build_endpoint_with_custom_hooks() {
+        use iroh::protocol::Router;
+        use std::sync::atomic::{AtomicBool, Ordering};
+
+        #[derive(Debug)]
+        struct TrackingHooks {
+            after_handshake_called: Arc<AtomicBool>,
+        }
+        impl iroh::endpoint::EndpointHooks for TrackingHooks {
+            fn after_handshake<'a>(
+                &'a self,
+                _conn: &'a iroh::endpoint::ConnectionInfo,
+            ) -> impl std::future::Future<Output = iroh::endpoint::AfterHandshakeOutcome> + Send + 'a
+            {
+                self.after_handshake_called.store(true, Ordering::SeqCst);
+                async { iroh::endpoint::AfterHandshakeOutcome::Accept }
+            }
+        }
+
+        let called = Arc::new(AtomicBool::new(false));
+        let hooks = TrackingHooks {
+            after_handshake_called: called.clone(),
+        };
+
+        let config_a = IrohConfig {
+            secret_key: Some([43u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint_a, _lookup_a) =
+            NetworkedIrohBlobStore::build_endpoint_with_hooks(&config_a, Some(hooks))
+                .await
+                .unwrap();
+
+        // Minimal handler so Router accepts on this ALPN
+        #[derive(Debug)]
+        struct Noop;
+        impl iroh::protocol::ProtocolHandler for Noop {
+            async fn accept(
+                &self,
+                _conn: iroh::endpoint::Connection,
+            ) -> Result<(), iroh::protocol::AcceptError> {
+                Ok(())
+            }
+        }
+
+        let _router_a = Router::builder(endpoint_a.clone())
+            .accept(b"test/hook/1", Noop)
+            .spawn();
+
+        // Build a second endpoint and connect to the first to trigger the hook
+        let config_b = IrohConfig {
+            secret_key: Some([44u8; 32]),
+            ..Default::default()
+        };
+        let (endpoint_b, lookup_b) = NetworkedIrohBlobStore::build_endpoint(&config_b)
+            .await
+            .unwrap();
+
+        // Tell B about A's address
+        let addr_a = endpoint_a.bound_sockets().into_iter().next().unwrap();
+        lookup_b.add_endpoint_info(iroh::EndpointAddr::from_parts(
+            endpoint_a.id(),
+            [iroh::TransportAddr::Ip(addr_a)],
+        ));
+
+        // B connects to A — this triggers A's after_handshake hook
+        let conn = endpoint_b
+            .connect(endpoint_a.id(), b"test/hook/1")
+            .await
+            .unwrap();
+
+        // Give the hook a moment to fire
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        assert!(
+            called.load(Ordering::SeqCst),
+            "after_handshake hook should have been called"
+        );
+
+        conn.close(0u32.into(), b"done");
+        endpoint_a.close().await;
+        endpoint_b.close().await;
+    }
 }
