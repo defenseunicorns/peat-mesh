@@ -152,7 +152,7 @@ async fn run() -> anyhow::Result<()> {
     info!("Discovery started");
 
     // ── Build Iroh endpoint ──────────────────────────────────────
-    let (endpoint, static_provider) = NetworkedIrohBlobStore::build_endpoint(&mesh_config.iroh)
+    let (endpoint, memory_lookup) = NetworkedIrohBlobStore::build_endpoint(&mesh_config.iroh)
         .await
         .map_err(|e| anyhow::anyhow!("Failed to build Iroh endpoint: {}", e))?;
 
@@ -281,7 +281,7 @@ async fn run() -> anyhow::Result<()> {
     let blob_store = NetworkedIrohBlobStore::from_endpoint_with_protocols(
         blob_dir,
         endpoint,
-        static_provider,
+        memory_lookup,
         extra_protocols,
     )
     .await

@@ -512,7 +512,7 @@ impl BlobStore for IrohBlobStore {
 // ============================================================================
 
 use crate::config::IrohConfig;
-use iroh::discovery::static_provider::StaticProvider;
+use iroh::address_lookup::memory::MemoryLookup;
 use iroh::protocol::Router;
 use iroh::{Endpoint, EndpointId, RelayMap, RelayMode, RelayUrl, SecretKey};
 use iroh_blobs::BlobsProtocol;
@@ -638,7 +638,7 @@ pub struct NetworkedIrohBlobStore {
     /// Reverse index: blob hash → peers that have it, peer → blob hashes
     blob_peer_index: TokioRwLock<BlobPeerIndex>,
     /// Static discovery provider for adding peer addresses at runtime
-    static_provider: StaticProvider,
+    memory_lookup: MemoryLookup,
     /// Timeout for graceful shutdown
     shutdown_timeout: Duration,
     /// Timeout for blob download operations from remote peers
@@ -666,16 +666,17 @@ impl NetworkedIrohBlobStore {
         Self::from_config(blob_dir, &config).await
     }
 
-    /// Build an Iroh [`Endpoint`] and [`StaticProvider`] from an [`IrohConfig`].
+    /// Build an Iroh [`Endpoint`] and [`MemoryLookup`] from an [`IrohConfig`].
     ///
     /// Use this when you need to access the endpoint before constructing the
     /// blob store (e.g. to share it with [`MeshSyncTransport`]).
     ///
     /// [`MeshSyncTransport`]: super::mesh_sync_transport::MeshSyncTransport
-    pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, StaticProvider)> {
-        let static_provider = StaticProvider::new();
+    pub async fn build_endpoint(config: &IrohConfig) -> Result<(Endpoint, MemoryLookup)> {
+        let memory_lookup = MemoryLookup::new();
 
-        let mut builder = Endpoint::builder().discovery(static_provider.clone());
+        let mut builder = Endpoint::builder(iroh::endpoint::presets::N0)
+            .address_lookup(memory_lookup.clone());
 
         // Apply deterministic secret key
         if let Some(key_bytes) = config.secret_key {
@@ -684,13 +685,9 @@ impl NetworkedIrohBlobStore {
 
         // Apply bind address
         if let Some(bind_addr) = config.bind_addr {
-            let bind_addr_v4 = match bind_addr {
-                std::net::SocketAddr::V4(addr) => addr,
-                std::net::SocketAddr::V6(_) => {
-                    return Err(anyhow::anyhow!("Only IPv4 bind addresses are supported"));
-                }
-            };
-            builder = builder.bind_addr_v4(bind_addr_v4);
+            builder = builder
+                .bind_addr(bind_addr)
+                .map_err(|e| anyhow::anyhow!("Invalid bind address: {}", e))?;
         }
 
         // Apply relay configuration
@@ -714,7 +711,7 @@ impl NetworkedIrohBlobStore {
             })?
             .map_err(|e| anyhow::anyhow!("Failed to create iroh endpoint: {}", e))?;
 
-        Ok((endpoint, static_provider))
+        Ok((endpoint, memory_lookup))
     }
 
     /// Create a networked blob store from an [`IrohConfig`].
@@ -722,11 +719,11 @@ impl NetworkedIrohBlobStore {
     /// Applies bind address and relay URL settings from the config when
     /// constructing the iroh endpoint.
     pub async fn from_config(blob_dir: PathBuf, config: &IrohConfig) -> Result<Arc<Self>> {
-        let (endpoint, static_provider) = Self::build_endpoint(config).await?;
+        let (endpoint, memory_lookup) = Self::build_endpoint(config).await?;
         Self::from_endpoint_with_protocols_with_timeouts(
             blob_dir,
             endpoint,
-            static_provider,
+            memory_lookup,
             vec![],
             config.shutdown_timeout,
             config.download_timeout,
@@ -755,8 +752,8 @@ impl NetworkedIrohBlobStore {
     }
 
     /// Get a reference to the static discovery provider
-    pub fn static_provider(&self) -> &StaticProvider {
-        &self.static_provider
+    pub fn memory_lookup(&self) -> &MemoryLookup {
+        &self.memory_lookup
     }
 
     /// Create a networked blob store from a pre-built [`Endpoint`], optionally
@@ -774,14 +771,14 @@ impl NetworkedIrohBlobStore {
     pub async fn from_endpoint_with_protocols(
         blob_dir: PathBuf,
         endpoint: Endpoint,
-        static_provider: StaticProvider,
+        memory_lookup: MemoryLookup,
         extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
     ) -> Result<Arc<Self>> {
         let defaults = IrohConfig::default();
         Self::from_endpoint_with_protocols_with_timeouts(
             blob_dir,
             endpoint,
-            static_provider,
+            memory_lookup,
             extra_protocols,
             defaults.shutdown_timeout,
             defaults.download_timeout,
@@ -794,7 +791,7 @@ impl NetworkedIrohBlobStore {
     pub async fn from_endpoint_with_protocols_with_timeouts(
         blob_dir: PathBuf,
         endpoint: Endpoint,
-        static_provider: StaticProvider,
+        memory_lookup: MemoryLookup,
         extra_protocols: Vec<(&'static [u8], Box<dyn iroh::protocol::DynProtocolHandler>)>,
         shutdown_timeout: Duration,
         download_timeout: Duration,
@@ -817,7 +814,7 @@ impl NetworkedIrohBlobStore {
             blobs_protocol,
             known_peers: TokioRwLock::new(Vec::new()),
             blob_peer_index: TokioRwLock::new(BlobPeerIndex::new()),
-            static_provider,
+            memory_lookup,
             shutdown_timeout,
             download_timeout,
         }))
@@ -1469,7 +1466,7 @@ mod tests {
             store_a.endpoint_id(),
             [iroh::TransportAddr::Ip(addr_a)],
         );
-        store_b.static_provider().add_endpoint_info(endpoint_addr_a);
+        store_b.memory_lookup().add_endpoint_info(endpoint_addr_a);
         store_b.add_peer(store_a.endpoint_id()).await;
 
         // Index should be empty before fetch
@@ -1491,7 +1488,7 @@ mod tests {
     }
 
     /// Two `NetworkedIrohBlobStore` instances discover each other via
-    /// `StaticProvider`, one creates a blob, the other fetches it over QUIC.
+    /// `MemoryLookup`, one creates a blob, the other fetches it over QUIC.
     #[tokio::test]
     async fn test_p2p_blob_transfer() {
         let dir_a = TempDir::new().unwrap();
@@ -1529,7 +1526,7 @@ mod tests {
             store_a.endpoint_id(),
             [iroh::TransportAddr::Ip(addr_a)],
         );
-        store_b.static_provider().add_endpoint_info(endpoint_addr_a);
+        store_b.memory_lookup().add_endpoint_info(endpoint_addr_a);
         store_b.add_peer(store_a.endpoint_id()).await;
 
         // Create a blob on store_a

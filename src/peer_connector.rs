@@ -1,7 +1,7 @@
 //! Bridges discovery events to Iroh peer management.
 //!
 //! The `PeerConnector` consumes `DiscoveryEvent`s (from Kubernetes, mDNS, etc.)
-//! and teaches the Iroh endpoint about discovered peers via the `StaticProvider`.
+//! and teaches the Iroh endpoint about discovered peers via the `MemoryLookup`.
 //! This enables Iroh QUIC connections to peers whose addresses were learned
 //! through non-Iroh discovery mechanisms.
 
@@ -20,7 +20,7 @@ use tracing::{debug, info, warn};
 ///
 /// Given a formation secret, the connector derives deterministic Iroh
 /// `EndpointId`s for discovered peers (using HKDF with context `"iroh:" + hostname`)
-/// and registers their addresses with the blob store's `StaticProvider`.
+/// and registers their addresses with the blob store's `MemoryLookup`.
 pub struct PeerConnector {
     formation_secret: Vec<u8>,
     blob_store: Arc<NetworkedIrohBlobStore>,
@@ -38,7 +38,7 @@ impl PeerConnector {
     /// # Arguments
     ///
     /// * `formation_secret` - Shared secret (raw bytes, already base64-decoded)
-    /// * `blob_store` - The networked blob store whose StaticProvider and peer list to update
+    /// * `blob_store` - The networked blob store whose MemoryLookup and peer list to update
     pub fn new(formation_secret: Vec<u8>, blob_store: Arc<NetworkedIrohBlobStore>) -> Self {
         Self {
             formation_secret,
@@ -137,7 +137,7 @@ impl PeerConnector {
                         };
 
                         self.blob_store
-                            .static_provider()
+                            .memory_lookup()
                             .add_endpoint_info(endpoint_addr);
                         self.blob_store.add_peer(endpoint_id).await;
 
@@ -152,7 +152,7 @@ impl PeerConnector {
                         let endpoint_id = self.derive_peer_endpoint_id(&node_id);
 
                         self.blob_store
-                            .static_provider()
+                            .memory_lookup()
                             .remove_endpoint_info(endpoint_id);
                         self.blob_store.remove_peer(&endpoint_id).await;
 
@@ -187,7 +187,7 @@ impl PeerConnector {
                                 "Removing peer on update: certificate no longer valid"
                             );
                             self.blob_store
-                                .static_provider()
+                                .memory_lookup()
                                 .remove_endpoint_info(endpoint_id);
                             self.blob_store.remove_peer(&endpoint_id).await;
                             continue;
@@ -205,7 +205,7 @@ impl PeerConnector {
                         };
 
                         self.blob_store
-                            .static_provider()
+                            .memory_lookup()
                             .set_endpoint_info(endpoint_addr);
 
                         debug!(
