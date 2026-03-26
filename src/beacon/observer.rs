@@ -106,7 +106,7 @@ impl BeaconObserver {
 
     /// Check if a geohash is nearby (same or adjacent cell)
     fn is_nearby_geohash(my_geohash: &str, other_geohash: &str) -> bool {
-        use geohash::Direction;
+        use crate::geohash::Direction;
 
         if my_geohash == other_geohash {
             return true;
@@ -125,7 +125,7 @@ impl BeaconObserver {
         ];
 
         for dir in &directions {
-            if let Ok(neighbor) = geohash::neighbor(my_geohash, *dir) {
+            if let Ok(neighbor) = crate::geohash::neighbor(my_geohash, *dir) {
                 if neighbor == other_geohash {
                     return true;
                 }
@@ -209,7 +209,7 @@ mod tests {
         assert!(BeaconObserver::is_nearby_geohash("9q8yy9m", "9q8yy9m"));
 
         // Adjacent geohashes should be nearby
-        let north = geohash::neighbor("9q8yy9m", geohash::Direction::N).unwrap();
+        let north = crate::geohash::neighbor("9q8yy9m", crate::geohash::Direction::N).unwrap();
         assert!(BeaconObserver::is_nearby_geohash("9q8yy9m", &north));
 
         // Distant geohash should not be nearby
@@ -263,18 +263,18 @@ mod tests {
 
         // Check all 8 neighbors
         let directions = [
-            geohash::Direction::N,
-            geohash::Direction::NE,
-            geohash::Direction::E,
-            geohash::Direction::SE,
-            geohash::Direction::S,
-            geohash::Direction::SW,
-            geohash::Direction::W,
-            geohash::Direction::NW,
+            crate::geohash::Direction::N,
+            crate::geohash::Direction::NE,
+            crate::geohash::Direction::E,
+            crate::geohash::Direction::SE,
+            crate::geohash::Direction::S,
+            crate::geohash::Direction::SW,
+            crate::geohash::Direction::W,
+            crate::geohash::Direction::NW,
         ];
 
         for dir in &directions {
-            let neighbor = geohash::neighbor(my, *dir).unwrap();
+            let neighbor = crate::geohash::neighbor(my, *dir).unwrap();
             assert!(
                 BeaconObserver::is_nearby_geohash(my, &neighbor),
                 "Neighbor in direction {:?} should be nearby",

@@ -145,17 +145,10 @@ pub struct GeographicBeacon {
 impl GeographicBeacon {
     /// Create a new beacon
     pub fn new(node_id: String, position: GeoPosition, hierarchy_level: HierarchyLevel) -> Self {
-        use geohash::encode;
-        use geohash::Coord;
+        use crate::geohash::encode;
 
-        let geohash = encode(
-            Coord {
-                x: position.lon,
-                y: position.lat,
-            },
-            7,
-        )
-        .unwrap_or_else(|_| String::from("invalid"));
+        let geohash =
+            encode(position.lon, position.lat, 7).unwrap_or_else(|_| String::from("invalid"));
 
         let timestamp = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)

@@ -5,6 +5,7 @@ pub mod beacon;
 pub mod config;
 pub mod discovery;
 pub mod flat_mesh;
+pub mod geohash;
 pub mod hierarchy;
 pub mod mesh;
 #[cfg(feature = "automerge-backend")]
