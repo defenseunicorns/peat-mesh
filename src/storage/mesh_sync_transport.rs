@@ -688,8 +688,10 @@ mod tests {
 
         let accepted = Arc::new(AtomicBool::new(false));
 
+        // Build endpoints using empty_builder to avoid external DNS/relay
+        // dependencies in tests.
         let lookup_a = MemoryLookup::new();
-        let endpoint_a = Endpoint::builder(iroh::endpoint::presets::N0)
+        let endpoint_a = Endpoint::empty_builder()
             .address_lookup(lookup_a.clone())
             .secret_key(iroh::SecretKey::from_bytes(&[10u8; 32]))
             .bind()
@@ -702,19 +704,15 @@ mod tests {
             .spawn();
 
         let lookup_b = MemoryLookup::new();
-        let endpoint_b = Endpoint::builder(iroh::endpoint::presets::N0)
+        let endpoint_b = Endpoint::empty_builder()
             .address_lookup(lookup_b.clone())
             .secret_key(iroh::SecretKey::from_bytes(&[11u8; 32]))
             .bind()
             .await
             .unwrap();
 
-        // Tell B about A's address
-        let addr_a = endpoint_a.bound_sockets().into_iter().next().unwrap();
-        lookup_b.add_endpoint_info(iroh::EndpointAddr::from_parts(
-            endpoint_a.id(),
-            [iroh::TransportAddr::Ip(addr_a)],
-        ));
+        // Tell B about A's full endpoint address
+        lookup_b.add_endpoint_info(endpoint_a.addr());
 
         // B connects to A
         let conn = endpoint_b.connect(endpoint_a.id(), alpn).await.unwrap();
@@ -752,7 +750,7 @@ mod tests {
     /// `peer_paths()` returns `None` for unknown peers.
     #[tokio::test]
     async fn test_peer_paths_returns_none_for_unknown_peer() {
-        let endpoint = Endpoint::builder(iroh::endpoint::presets::N0)
+        let endpoint = Endpoint::empty_builder()
             .secret_key(iroh::SecretKey::from_bytes(&[20u8; 32]))
             .bind()
             .await
