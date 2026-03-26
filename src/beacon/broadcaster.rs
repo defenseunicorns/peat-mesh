@@ -112,20 +112,14 @@ impl BeaconBroadcaster {
     ///
     /// This is useful for mobile nodes that change location over time.
     pub async fn update_position(&self, new_position: GeoPosition) {
-        use geohash::{encode, Coord};
+        use crate::geohash::encode;
 
         let mut beacon = self.beacon.write().await;
         beacon.position = new_position;
 
         // Recalculate geohash
-        beacon.geohash = encode(
-            Coord {
-                x: new_position.lon,
-                y: new_position.lat,
-            },
-            7,
-        )
-        .unwrap_or_else(|_| String::from("invalid"));
+        beacon.geohash = encode(new_position.lon, new_position.lat, 7)
+            .unwrap_or_else(|_| String::from("invalid"));
     }
 }
 

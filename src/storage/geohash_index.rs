@@ -266,13 +266,13 @@ impl GeohashIndex {
 
     /// Encode a coordinate to a geohash string
     fn encode(&self, lat: f64, lon: f64) -> Result<String> {
-        let coord = geohash::Coord { x: lon, y: lat };
-        geohash::encode(coord, self.precision).context("Failed to encode geohash")
+        crate::geohash::encode(lon, lat, self.precision).context("Failed to encode geohash")
     }
 
     /// Get the 8 neighboring geohash cells
     fn get_neighbors(&self, geohash: &str) -> Result<Vec<String>> {
-        let neighbors = geohash::neighbors(geohash).context("Failed to get geohash neighbors")?;
+        let neighbors =
+            crate::geohash::neighbors(geohash).context("Failed to get geohash neighbors")?;
         Ok(vec![
             neighbors.n,
             neighbors.ne,
