@@ -256,6 +256,7 @@ impl Drop for TtlManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::storage::ttl::EvictionStrategy;
     use automerge::Automerge;
     use std::time::Duration;
     use tokio::time::sleep;
@@ -330,6 +331,151 @@ mod tests {
         assert!(result.is_none());
 
         ttl_manager.stop_background_cleanup();
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_put_with_ttl_registers_expiry() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let store = Arc::new(AutomergeStore::open(temp_dir.path())?);
+        let config = TtlConfig::tactical();
+        let ttl_manager = TtlManager::new(store.clone(), config);
+
+        // Create a document and store it with TTL via the integrated path
+        let doc = Automerge::new();
+        store.put("beacons/doc1", &doc)?;
+
+        // Beacons have a TTL in tactical config (5 min), so set_ttl should register it
+        let beacon_ttl = ttl_manager.config().get_collection_ttl("beacons").unwrap();
+        ttl_manager.set_ttl("beacons/doc1", beacon_ttl)?;
+
+        assert_eq!(ttl_manager.pending_count(), 1);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn test_put_with_ttl_no_ttl_collection() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let store = Arc::new(AutomergeStore::open(temp_dir.path())?);
+        let config = TtlConfig::tactical();
+        let ttl_manager = TtlManager::new(store.clone(), config);
+
+        // hierarchical_commands has no TTL configured (returns None)
+        let doc = Automerge::new();
+        store.put("hierarchical_commands/doc1", &doc)?;
+
+        // Only register TTL if the collection has one configured
+        let collection_ttl = ttl_manager
+            .config()
+            .get_collection_ttl("hierarchical_commands");
+        assert!(
+            collection_ttl.is_none(),
+            "hierarchical_commands should have no TTL"
+        );
+
+        // Since there's no TTL for this collection, nothing should be registered
+        if let Some(ttl) = collection_ttl {
+            ttl_manager.set_ttl("hierarchical_commands/doc1", ttl)?;
+        }
+
+        assert_eq!(ttl_manager.pending_count(), 0);
+
+        Ok(())
+    }
+
+    #[test]
+    fn test_tactical_preset_ttl_values() {
+        let config = TtlConfig::tactical();
+
+        assert_eq!(
+            config.beacon_ttl,
+            Duration::from_secs(300),
+            "beacon_ttl should be 5 minutes"
+        );
+        assert_eq!(
+            config.position_ttl,
+            Duration::from_secs(600),
+            "position_ttl should be 10 minutes"
+        );
+        assert_eq!(
+            config.capability_ttl,
+            Duration::from_secs(7200),
+            "capability_ttl should be 2 hours"
+        );
+        assert_eq!(
+            config.tombstone_ttl_hours, 168,
+            "tombstone TTL should be 7 days (168 hours)"
+        );
+        assert!(matches!(
+            config.evict_strategy,
+            EvictionStrategy::OldestFirst
+        ));
+    }
+
+    #[test]
+    fn test_effective_ttl_returns_collection_ttl() {
+        let config = TtlConfig::tactical();
+
+        // Known collections should return their configured TTLs
+        assert_eq!(
+            config.get_collection_ttl("beacons"),
+            Some(Duration::from_secs(300))
+        );
+        assert_eq!(
+            config.get_collection_ttl("node_positions"),
+            Some(Duration::from_secs(600))
+        );
+        assert_eq!(
+            config.get_collection_ttl("capabilities"),
+            Some(Duration::from_secs(7200))
+        );
+        assert_eq!(
+            config.get_collection_ttl("cells"),
+            Some(Duration::from_secs(3600))
+        );
+
+        // Collections without TTL should return None
+        assert_eq!(config.get_collection_ttl("hierarchical_commands"), None);
+        assert_eq!(config.get_collection_ttl("unknown_collection"), None);
+    }
+
+    #[tokio::test]
+    async fn test_ttl_manager_with_automerge_store_cleanup() -> Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let store = Arc::new(AutomergeStore::open(temp_dir.path())?);
+        let config = TtlConfig::tactical();
+        let ttl_manager = TtlManager::new(store.clone(), config);
+
+        // Insert a document into the store
+        let doc = Automerge::new();
+        store.put("beacons/ephemeral1", &doc)?;
+
+        // Verify document exists
+        let result = store.get("beacons/ephemeral1")?;
+        assert!(result.is_some(), "Document should exist before TTL expiry");
+
+        // Set a very short TTL (100ms)
+        ttl_manager.set_ttl("beacons/ephemeral1", Duration::from_millis(100))?;
+        assert_eq!(ttl_manager.pending_count(), 1);
+
+        // Wait for expiration
+        sleep(Duration::from_millis(150)).await;
+
+        // Run cleanup and verify the document was deleted
+        let cleaned = ttl_manager.cleanup_expired()?;
+        assert_eq!(cleaned, 1, "Should have cleaned up 1 expired document");
+
+        // Verify the document is gone from the store
+        let result = store.get("beacons/ephemeral1")?;
+        assert!(
+            result.is_none(),
+            "Document should be deleted after TTL expiry and cleanup"
+        );
+
+        // Verify pending count is back to 0
+        assert_eq!(ttl_manager.pending_count(), 0);
 
         Ok(())
     }

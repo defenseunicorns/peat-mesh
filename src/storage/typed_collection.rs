@@ -15,6 +15,7 @@ use tokio_stream::StreamExt;
 use super::automerge_store::AutomergeStore;
 use super::json_convert::{automerge_to_json, json_to_automerge};
 use super::query::Query;
+use super::ttl_manager::TtlManager;
 
 /// A typed, serde-based view over a namespaced document collection.
 ///
@@ -39,6 +40,7 @@ pub struct TypedCollection<T> {
     store: Arc<AutomergeStore>,
     name: String,
     prefix: String,
+    ttl_manager: Option<Arc<TtlManager>>,
     _marker: PhantomData<T>,
 }
 
@@ -49,6 +51,22 @@ impl<T: Serialize + DeserializeOwned> TypedCollection<T> {
             store,
             name: name.to_string(),
             prefix: format!("{}:", name),
+            ttl_manager: None,
+            _marker: PhantomData,
+        }
+    }
+
+    /// Create a new typed collection view with a TTL manager for automatic expiration.
+    pub fn with_ttl_manager(
+        store: Arc<AutomergeStore>,
+        name: &str,
+        ttl_manager: Arc<TtlManager>,
+    ) -> Self {
+        Self {
+            store,
+            name: name.to_string(),
+            prefix: format!("{}:", name),
+            ttl_manager: Some(ttl_manager),
             _marker: PhantomData,
         }
     }
@@ -63,7 +81,11 @@ impl<T: Serialize + DeserializeOwned> TypedCollection<T> {
         let key = format!("{}{}", self.prefix, id);
         let existing = self.store.get(&key)?;
         let am_doc = json_to_automerge(&json, existing.as_ref())?;
-        self.store.put(&key, &am_doc)?;
+        if let Some(ref mgr) = self.ttl_manager {
+            self.store.put_with_ttl(&key, &am_doc, mgr)?;
+        } else {
+            self.store.put(&key, &am_doc)?;
+        }
         Ok(())
     }
 
