@@ -531,6 +531,8 @@ pub struct AutomergeSyncCoordinator {
     channel_manager: Arc<RwLock<Option<Weak<super::sync_channel::SyncChannelManager>>>>,
     /// Negentropy set reconciliation for efficient document discovery (ADR-040, Issue #435)
     negentropy_sync: Arc<NegentropySync>,
+    /// Optional TTL manager for automatic document expiration
+    ttl_manager: Arc<RwLock<Option<Arc<super::ttl_manager::TtlManager>>>>,
 }
 
 #[cfg(feature = "automerge-backend")]
@@ -572,6 +574,7 @@ impl AutomergeSyncCoordinator {
             sync_router: None,
             channel_manager: Arc::new(RwLock::new(None)),
             negentropy_sync: Arc::new(NegentropySync::new()),
+            ttl_manager: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -602,6 +605,7 @@ impl AutomergeSyncCoordinator {
             sync_router: None,
             channel_manager: Arc::new(RwLock::new(None)),
             negentropy_sync: Arc::new(NegentropySync::new()),
+            ttl_manager: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -614,6 +618,25 @@ impl AutomergeSyncCoordinator {
             .channel_manager
             .write()
             .unwrap_or_else(|e| e.into_inner()) = Some(Arc::downgrade(&manager));
+    }
+
+    /// Set the TTL manager for automatic document expiration on synced documents
+    pub fn set_ttl_manager(&self, manager: Arc<super::ttl_manager::TtlManager>) {
+        *self.ttl_manager.write().unwrap_or_else(|e| e.into_inner()) = Some(manager);
+    }
+
+    /// Put a document into the store, applying TTL if a TTL manager is configured.
+    fn put_with_ttl(&self, key: &str, doc: &automerge::Automerge) -> anyhow::Result<()> {
+        let ttl_mgr = self
+            .ttl_manager
+            .read()
+            .unwrap_or_else(|e| e.into_inner())
+            .clone();
+        if let Some(ref mgr) = ttl_mgr {
+            self.store.put_with_ttl(key, doc, mgr)
+        } else {
+            self.store.put(key, doc)
+        }
     }
 
     /// Get the channel manager if available
@@ -659,6 +682,7 @@ impl AutomergeSyncCoordinator {
             sync_router: Some(router),
             channel_manager: Arc::new(RwLock::new(None)),
             negentropy_sync: Arc::new(NegentropySync::new()),
+            ttl_manager: Arc::new(RwLock::new(None)),
         }
     }
 
@@ -1033,7 +1057,7 @@ impl AutomergeSyncCoordinator {
         // The flow control cooldown (per peer+doc) will correctly prevent
         // syncing back to the peer that just sent us this document,
         // while still allowing sync to other peers and notifying observers.
-        self.store.put(doc_key, &doc)?;
+        self.put_with_ttl(doc_key, &doc)?;
 
         // Generate response message
         if let Some(response) = SyncDoc::generate_sync_message(&doc, &mut sync_state) {
@@ -2235,13 +2259,13 @@ impl AutomergeSyncCoordinator {
                     .context("Failed to merge state snapshot")?;
 
                 // Update the store (this triggers change notification via broadcast channel)
-                self.store.put(doc_key, &existing_doc)?;
+                self.put_with_ttl(doc_key, &existing_doc)?;
 
                 tracing::debug!("Merged state snapshot into existing document {}", doc_key);
             }
             Ok(None) => {
                 // No existing document, just store the received one
-                self.store.put(doc_key, &received_doc)?;
+                self.put_with_ttl(doc_key, &received_doc)?;
 
                 tracing::debug!("Stored new document {} from state snapshot", doc_key);
             }
@@ -2251,7 +2275,7 @@ impl AutomergeSyncCoordinator {
                     doc_key,
                     e
                 );
-                self.store.put(doc_key, &received_doc)?;
+                self.put_with_ttl(doc_key, &received_doc)?;
             }
         }
 

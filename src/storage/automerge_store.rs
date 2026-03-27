@@ -5,6 +5,7 @@
 //! to eliminate C/C++ build dependencies and align with Iroh's storage layer.
 
 use crate::storage::traits::{Collection, DocumentPredicate};
+use crate::storage::ttl_manager::TtlManager;
 use automerge::{transaction::Transactable, Automerge, ReadDoc};
 use lru::LruCache;
 use redb::{Builder, Database, ReadableTable, ReadableTableMetadata, TableDefinition};
@@ -180,6 +181,27 @@ impl AutomergeStore {
     /// The sending peer already has this document, so syncing back is unnecessary.
     pub fn put_without_notify(&self, key: &str, doc: &Automerge) -> Result<()> {
         self.put_inner(key, doc, false)
+    }
+
+    /// Save an Automerge document with TTL-based expiration.
+    ///
+    /// Delegates to `put()` and then schedules TTL cleanup via the TtlManager
+    /// if the collection has a configured TTL. The collection name is extracted
+    /// from the key prefix (before the first '/' or ':').
+    pub fn put_with_ttl(&self, key: &str, doc: &Automerge, ttl_manager: &TtlManager) -> Result<()> {
+        self.put(key, doc)?;
+
+        // Extract collection name from key prefix (handles both "col/id" and "col:id")
+        let collection = key
+            .find(|c| c == '/' || c == ':')
+            .map(|pos| &key[..pos])
+            .unwrap_or(key);
+
+        if let Some(ttl) = ttl_manager.config().get_collection_ttl(collection) {
+            ttl_manager.set_ttl(key, ttl)?;
+        }
+
+        Ok(())
     }
 
     /// Internal put implementation

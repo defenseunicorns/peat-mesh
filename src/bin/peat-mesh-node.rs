@@ -14,7 +14,7 @@ use peat_mesh::security::{DeviceKeypair, FormationKey};
 use peat_mesh::storage::{
     AutomergeStore, AutomergeSyncCoordinator, CertificateStore, EnrollmentProtocolHandler,
     MeshSyncTransport, NetworkedIrohBlobStore, SyncChannelManager, SyncProtocolHandler,
-    SyncTransport, CAP_AUTOMERGE_ALPN, CAP_ENROLLMENT_ALPN,
+    SyncTransport, TtlConfig, TtlManager, CAP_AUTOMERGE_ALPN, CAP_ENROLLMENT_ALPN,
 };
 use peat_mesh::transport::{
     LiteMeshTransport, LiteMessageType, LiteTransportConfig, MeshTransport, OtaSender,
@@ -173,6 +173,20 @@ async fn run() -> anyhow::Result<()> {
             .map_err(|e| anyhow::anyhow!("Failed to open AutomergeStore: {}", e))?,
     );
 
+    // ── TTL manager ─────────────────────────────────────────────
+    let ttl_config = match std::env::var("PEAT_TTL_PRESET").as_deref() {
+        Ok("tactical") => TtlConfig::tactical(),
+        Ok("long_duration") => TtlConfig::long_duration(),
+        Ok("offline_node") => TtlConfig::offline_node(),
+        _ => TtlConfig::default(),
+    };
+    let ttl_manager = Arc::new(TtlManager::new(automerge_store.clone(), ttl_config));
+    ttl_manager.start_background_cleanup();
+    info!(
+        preset = std::env::var("PEAT_TTL_PRESET").unwrap_or_else(|_| "default".to_string()),
+        "TTL manager started"
+    );
+
     // ── Certificate store (ADR-0006) ────────────────────────────
     let cert_store: Option<Arc<CertificateStore>> = if let Some(ref auth_hex) = authority_key_hex {
         let auth_bytes = hex::decode(auth_hex)
@@ -221,6 +235,7 @@ async fn run() -> anyhow::Result<()> {
         coordinator.clone(),
     ));
     coordinator.set_channel_manager(channel_manager);
+    coordinator.set_ttl_manager(ttl_manager.clone());
 
     // ── Sync protocol handler (for incoming QUIC connections) ───
     let mut sync_handler = SyncProtocolHandler::new(sync_transport.clone(), coordinator.clone());
@@ -484,6 +499,7 @@ async fn run() -> anyhow::Result<()> {
     info!("Shutting down...");
     let _ = sync_cancel_tx.send(true);
     let _ = ota_cancel_tx.send(true);
+    ttl_manager.stop_background_cleanup();
     gc.stop();
     gc_handle.abort();
     if let Err(e) = lite_transport.stop().await {
