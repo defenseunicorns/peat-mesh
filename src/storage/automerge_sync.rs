@@ -2415,6 +2415,54 @@ impl AutomergeSyncCoordinator {
         }
     }
 
+    /// Propagate a locally-created tombstone to all connected peers (Issue #668)
+    ///
+    /// Unlike `propagate_tombstone_to_peers()` which excludes a source peer,
+    /// this method sends to ALL connected peers. Used when a local `delete()`
+    /// creates a tombstone that needs immediate propagation.
+    pub async fn propagate_tombstone_to_all(
+        &self,
+        tombstone_msg: &crate::qos::TombstoneSyncMessage,
+    ) {
+        use crate::qos::PropagationDirection;
+
+        let direction = tombstone_msg.direction;
+        let all_peers = self.transport.connected_peers();
+
+        if all_peers.is_empty() {
+            return;
+        }
+
+        let target_peers: Vec<EndpointId> = match direction {
+            PropagationDirection::SystemWide | PropagationDirection::Bidirectional => all_peers,
+            PropagationDirection::UpOnly | PropagationDirection::DownOnly => {
+                // Deferred to PR 3 (hierarchy-aware propagation)
+                tracing::debug!(
+                    "Tombstone {}:{} has {:?} propagation - skipping at transport layer",
+                    tombstone_msg.tombstone.collection,
+                    tombstone_msg.tombstone.document_id,
+                    direction
+                );
+                Vec::new()
+            }
+        };
+
+        for peer_id in target_peers {
+            if let Err(e) = self
+                .send_single_tombstone_to_peer(peer_id, tombstone_msg)
+                .await
+            {
+                tracing::warn!(
+                    "Failed to propagate tombstone {}:{} to peer {:?}: {}",
+                    tombstone_msg.tombstone.collection,
+                    tombstone_msg.tombstone.document_id,
+                    peer_id,
+                    e
+                );
+            }
+        }
+    }
+
     /// Send a single tombstone to a peer
     ///
     /// # Wire Format
